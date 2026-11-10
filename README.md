@@ -36,14 +36,21 @@ Python standard-library HTTP code, as the reference CLI does.
 
 ## Setup
 
+
 1. Create and activate a Python virtual environment.
 2. Install dependencies:
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+  ```bash
+  pip install -r requirements.txt
+  ```
 
-3. Copy `.env.example` to `.env`.
+3. Copy `.env.example` to `.env`. 
+
+  ```powershell
+  Copy-Item .env.example .env
+  # Fill in ATLAS_API_KEY in .env
+  .\venv\Scripts\python.exe app.py
+  ```
 4. Put the API key supplied through PEAR in `ATLAS_API_KEY`.
 5. Start Flask:
 

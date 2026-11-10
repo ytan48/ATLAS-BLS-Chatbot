@@ -1,13 +1,10 @@
 # BLS Virtual Advisor
 
-An AI-powered web chatbot for the University of Illinois **Bachelor of Liberal
-Studies (BLS)** program.
+An AI-powered web chatbot for the University of Illinois **Bachelor of Liberal Studies (BLS)** program.
 
-The existing Flask service, full-page UI, floating widget, and embed script are
-preserved. The response pipeline is adapted from
-[`UIUCATLAS/chat_illinois_cli`](https://github.com/UIUCATLAS/chat_illinois_cli):
-one OpenAI-compatible request is sent to the ATLAS LLM server with a system
-prompt made from a local instructions file plus a Markdown knowledge base.
+The original Flask service, full-page chatbot interface, floating widget, embed script, and overall web design are based on the [ATLAS-Illinois/bls-chatbot](https://github.com/ATLAS-Illinois/bls-chatbot) repository.
+
+The backend LLM integration and response pipeline have been updated based on [UIUCATLAS/chat_illinois_cli](https://github.com/UIUCATLAS/chat_illinois_cli). The updated implementation connects to the ATLAS LLM server using an OpenAI-compatible API and combines a local system prompt with a Markdown knowledge base to generate responses.
 
 ## Architecture
 

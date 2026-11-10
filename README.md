@@ -23,11 +23,8 @@ active web path.
 
 ## Reference implementation
 
-The ATLAS integration follows `chat_illinois_cli` at commit
-`ab9826ae32db6d9fb02b8792fbb131b4d3c63481` (October 30, 2026):
+The ATLAS integration follows `chat_illinois_cli` (October 30, 2026):
 
-- API: `https://sequitor01.atlas.illinois.edu/v1/chat/completions`
-- Authentication: `Authorization: Bearer <PEAR key>`
 - System prompt: `instructions.txt + "\n" + knowledgebase.md`
 - Request parameters: `model`, `temperature`, and `reasoning_effort`
 - Optional context: include the previous assistant answer when

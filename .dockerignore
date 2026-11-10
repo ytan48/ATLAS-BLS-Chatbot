@@ -8,3 +8,4 @@ frontend/embed-nextjs/
 node_modules/
 .git/
 *.md
+!config/knowledgebase.md

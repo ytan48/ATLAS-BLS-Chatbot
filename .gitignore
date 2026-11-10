@@ -4,6 +4,7 @@ BLS Info for AI_ML Interns SP26/
 # Ignore markdown files except README
 *.md
 !README.md
+!config/knowledgebase.md
 
 # Common Python/OS ignores
 __pycache__/

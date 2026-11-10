@@ -9,15 +9,15 @@
 
     :root {
       --navy: #13294B;
-      --navy-dark: #0f203b;
-      --navy-light: #1c3f72;
-      --orange: #E84A27;
-      --orange-dark: #c93d20;
-      --bg: #f0f2f7;
+      --navy-dark: #0E0F20;
+      --navy-light: #1D58A7;
+      --orange: #FF5F05;
+      --orange-dark: #C84113;
+      --bg: #F4F4F4;
       --card: #ffffff;
-      --border: #e2e8f0;
-      --text: #1e293b;
-      --muted: #64748b;
+      --border: #D7D8D8;
+      --text: #252525;
+      --muted: #707372;
     }
 
     html, body {
@@ -50,7 +50,8 @@
       width: 44px;
       height: 44px;
       border-radius: 14px;
-      background: linear-gradient(135deg, var(--navy), var(--navy-light));
+      background: linear-gradient(135deg, var(--navy-light), var(--navy));
+      border-bottom: 4px solid var(--orange);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -70,19 +71,19 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      background: #f0fdf4;
-      border: 1px solid #bbf7d0;
+      background: #ffffff;
+      border: 1px solid var(--navy);
       border-radius: 20px;
       padding: 5px 12px;
       font-size: 0.75em;
       font-weight: 600;
-      color: #166534;
+      color: var(--navy);
       flex-shrink: 0;
     }
     .online-dot {
       width: 7px;
       height: 7px;
-      background: #22c55e;
+      background: var(--orange);
       border-radius: 50%;
       animation: online-pulse 2.5s ease-in-out infinite;
     }
@@ -105,8 +106,9 @@
 
     /* ── Agent pipeline bar ───────────────────────────── */
     #agent-bar {
-      background: linear-gradient(90deg, #eef2ff 0%, #f0fdf4 100%);
+      background: #f4f4f4;
       border-bottom: 1px solid var(--border);
+      box-shadow: inset 4px 0 0 var(--orange);
       padding: 10px 20px;
       display: none;
       align-items: center;
@@ -128,7 +130,7 @@
       white-space: nowrap;
     }
     .chip-a { background: rgba(19,41,75,0.08); color: var(--navy); opacity: 0.35; }
-    .chip-b { background: rgba(232,74,39,0.08); color: #c43a1d; opacity: 0.35; }
+    .chip-b { background: rgba(255,95,5,0.11); color: var(--orange-dark); opacity: 0.35; }
     .agent-chip.is-active { opacity: 1; }
     .agent-chip.is-done   { opacity: 0.5; }
 
@@ -167,7 +169,7 @@
       display: flex;
       flex-direction: column;
       gap: 16px;
-      background: #f7f8fb;
+      background: #f4f4f4;
       scroll-behavior: smooth;
     }
     .messages::-webkit-scrollbar { width: 5px; }
@@ -202,10 +204,11 @@
     .bot-msg code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; font-size: 0.88em; }
 
     .user-msg {
-      background: linear-gradient(135deg, var(--orange), var(--orange-dark));
-      color: white;
+      background: var(--orange);
+      color: var(--navy);
+      font-weight: 600;
       border-radius: 18px 4px 18px 18px;
-      box-shadow: 0 3px 14px rgba(232,74,39,0.25);
+      box-shadow: 0 3px 14px rgba(255,95,5,0.25);
     }
 
     .msg-time {
@@ -217,26 +220,26 @@
 
     /* Typing indicator */
     .typing-bubble {
-      background: white;
-      border: 1px solid #e8edf5;
-      border-radius: 4px 18px 18px 18px;
       padding: 14px 18px;
       display: flex;
       gap: 5px;
       align-items: center;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
-    .dot {
+    .typing-bubble > .typing-dot {
+      display: block;
+      flex: 0 0 auto;
       width: 7px; height: 7px;
       background: #94a3b8;
       border-radius: 50%;
-      animation: dot-bounce 1.4s ease-in-out infinite both;
+      will-change: transform, opacity;
+      animation: typing-wave-bounce 1.2s ease-in-out infinite both;
     }
-    .dot:nth-child(2) { animation-delay: 0.18s; }
-    .dot:nth-child(3) { animation-delay: 0.36s; }
-    @keyframes dot-bounce {
-      0%,80%,100% { transform: translateY(0) scale(0.8); opacity: 0.4; }
-      40% { transform: translateY(-6px) scale(1); opacity: 1; }
+    .typing-bubble > .typing-dot:nth-child(1) { animation-delay: 0s; }
+    .typing-bubble > .typing-dot:nth-child(2) { animation-delay: 0.16s; }
+    .typing-bubble > .typing-dot:nth-child(3) { animation-delay: 0.32s; }
+    @keyframes typing-wave-bounce {
+      0%, 60%, 100% { transform: translateY(0) scale(0.82); opacity: 0.45; }
+      30% { transform: translateY(-8px) scale(1); opacity: 1; }
     }
 
     /* Stream cursor */
@@ -271,9 +274,9 @@
       line-height: 1.3;
     }
     .q-chip:hover {
-      border-color: var(--navy);
+      border-color: var(--orange);
       color: var(--navy);
-      background: #eef2ff;
+      background: #fff3e8;
       transform: translateY(-1px);
       box-shadow: 0 2px 8px rgba(19,41,75,0.1);
     }
@@ -308,7 +311,7 @@
     #user-input:focus {
       border-color: var(--navy);
       background: white;
-      box-shadow: 0 0 0 3px rgba(19,41,75,0.06);
+      box-shadow: 0 0 0 3px rgba(255,95,5,0.18);
     }
     #user-input::placeholder { color: #94a3b8; }
 
@@ -376,17 +379,17 @@
   <!-- Chat card -->
   <div class="chat-card">
 
-    <!-- Agent pipeline status -->
+    <!-- ATLAS request status -->
     <div id="agent-bar">
       <div class="pipeline">
         <div class="agent-chip chip-a" id="chip-a">
           <span class="chip-dot"></span>
-          Agent A · Retriever
+          BLS Knowledge Base
         </div>
         <span class="pipe-sep">→</span>
         <div class="agent-chip chip-b" id="chip-b">
           <span class="chip-dot"></span>
-          Agent B · Refiner
+          ATLAS Model
         </div>
       </div>
       <div class="agent-desc" id="agent-desc">Processing your question…</div>
@@ -423,6 +426,7 @@
   const chipA    = document.getElementById('chip-a');
   const chipB    = document.getElementById('chip-b');
   const agentDesc= document.getElementById('agent-desc');
+  let lastResponse = '';
 
   // Initial greeting
   appendBot('Hello! I\'m the **BLS Virtual Advisor** — here to answer your questions about the **Bachelor of Liberal Studies** program at the University of Illinois.\n\nAsk me anything about tuition, transfer credits, concentrations, admissions, or how the program works.');
@@ -468,7 +472,7 @@
       const res = await fetch('/api/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: text }),
+        body: JSON.stringify({ query: text, last_response: lastResponse }),
       });
 
       if (!res.ok || !res.body) throw new Error();
@@ -490,21 +494,26 @@
           let ev; try { ev = JSON.parse(raw); } catch { continue; }
 
           if (ev.type === 'agent_status') {
-            removeEl(typingEl);
             showAgent(ev.agent, ev.message);
           } else if (ev.type === 'answer') {
-            removeEl(typingEl);
             hideAgentBar();
-            streamEl = appendBotStreaming(ev.content);
+            lastResponse = ev.content || '';
+            streamEl = appendBotStreaming(ev.content || '', typingEl);
+          } else if (ev.type === 'error') {
+            hideAgentBar();
+            replaceTypingWithBot(typingEl, ev.message || 'Unable to generate a response. Please try again.');
           } else if (ev.type === 'done') {
             hideAgentBar();
           }
         }
       }
+      if (typingEl.querySelector('.typing-bubble')) {
+        hideAgentBar();
+        replaceTypingWithBot(typingEl, 'The advisor service returned an empty response. Please try again.');
+      }
     } catch {
-      removeEl(typingEl);
       hideAgentBar();
-      appendBot('I couldn\'t reach the advisor service. Please email **onlineBLS@illinois.edu** for help.');
+      replaceTypingWithBot(typingEl, 'I couldn\'t reach the advisor service. Please email **onlineBLS@illinois.edu** for help.');
     } finally {
       sendBtn.disabled = false;
       inputEl.focus();
@@ -532,12 +541,20 @@
     return row;
   }
 
-  function appendBotStreaming(content) {
-    const row = mk('div', 'msg-row bot');
-    const msg = mk('div', 'message bot-msg');
-    const t   = mk('div', 'msg-time'); t.textContent = now();
-    row.append(msg, t);
-    msgsEl.appendChild(row);
+  function appendBotStreaming(content, pendingRow = null) {
+    const row = pendingRow?.isConnected ? pendingRow : mk('div', 'msg-row bot');
+    const msg = pendingRow?.isConnected ? row.querySelector('.message') : mk('div', 'message bot-msg');
+    msg.classList.remove('typing-bubble');
+    msg.removeAttribute('role');
+    msg.removeAttribute('aria-label');
+    msg.removeAttribute('aria-live');
+    msg.innerHTML = '';
+    if (!pendingRow?.isConnected) msgsEl.appendChild(row);
+    if (!row.querySelector('.msg-time')) {
+      const t = mk('div', 'msg-time');
+      t.textContent = now();
+      row.append(msg, t);
+    }
 
     const chars = [...content];
     let i = 0, acc = '';
@@ -554,11 +571,33 @@
   }
 
   function appendTyping() {
-    const div = mk('div', 'typing-bubble');
-    div.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
-    msgsEl.appendChild(div);
+    const row = mk('div', 'msg-row bot');
+    const bubble = mk('div', 'message bot-msg typing-bubble');
+    bubble.setAttribute('role', 'status');
+    bubble.setAttribute('aria-live', 'polite');
+    bubble.setAttribute('aria-label', 'BLS advisor is typing');
+    bubble.innerHTML = '<span class="typing-dot" aria-hidden="true"></span><span class="typing-dot" aria-hidden="true"></span><span class="typing-dot" aria-hidden="true"></span>';
+    row.appendChild(bubble);
+    msgsEl.appendChild(row);
     scrollDown();
-    return div;
+    return row;
+  }
+
+  function replaceTypingWithBot(row, md) {
+    if (!row?.isConnected) return appendBot(md);
+    const msg = row.querySelector('.message');
+    msg.classList.remove('typing-bubble');
+    msg.removeAttribute('role');
+    msg.removeAttribute('aria-label');
+    msg.removeAttribute('aria-live');
+    msg.innerHTML = marked.parse(md);
+    if (!row.querySelector('.msg-time')) {
+      const t = mk('div', 'msg-time');
+      t.textContent = now();
+      row.appendChild(t);
+    }
+    scrollDown();
+    return row;
   }
 
   function appendChips(qs) {
@@ -574,7 +613,6 @@
   }
 
   function removeChips() { const c = document.getElementById('quick-chips'); if (c) c.remove(); }
-  function removeEl(e) { if (e?.parentNode) e.parentNode.removeChild(e); }
   function mk(tag, cls) { const e = document.createElement(tag); if (cls) e.className = cls; return e; }
   function scrollDown() { msgsEl.scrollTop = msgsEl.scrollHeight; }
   function now() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }

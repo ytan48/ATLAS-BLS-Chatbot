@@ -5,12 +5,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        blsNavy: '#0f2d52',
-        blsTeal: '#0f766e',
-        blsSand: '#f6f3eb'
+        ilBlue: '#13294B',
+        ilBlueLight: '#1D58A7',
+        ilOrange: '#FF5F05',
+        ilAltgeld: '#C84113',
+        ilStorm: '#707372',
+        ilStormLight: '#F4F4F4'
       },
       boxShadow: {
-        widget: '0 10px 30px rgba(15, 45, 82, 0.15)'
+        widget: '0 10px 30px rgba(19, 41, 75, 0.18)'
       }
     }
   },

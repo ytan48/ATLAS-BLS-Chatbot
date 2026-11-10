@@ -1,279 +1,141 @@
 # BLS Virtual Advisor
 
-An AI-powered chatbot for the **Bachelor of Liberal Studies (BLS)** program at the University of Illinois. Uses a dual-agent pipeline — Agent A retrieves grounded facts from BLS documents, Agent B refines them into a clean, student-facing response.
+An AI-powered web chatbot for the University of Illinois **Bachelor of Liberal
+Studies (BLS)** program.
 
----
+The existing Flask service, full-page UI, floating widget, and embed script are
+preserved. The response pipeline is adapted from
+[`UIUCATLAS/chat_illinois_cli`](https://github.com/UIUCATLAS/chat_illinois_cli):
+one OpenAI-compatible request is sent to the ATLAS LLM server with a system
+prompt made from a local instructions file plus a Markdown knowledge base.
 
-## System Architecture
+## Architecture
 
 ```mermaid
-graph TD
-    User[User]
-    User --> AgentA[Agent A · Retriever]
-    AgentA -->|Sends query| API[chat.illinois.edu API]
-    API -->|Retrieves from BLS documents| Docs[BLS Document Store]
-    API -->|Returns raw structured facts| AgentA
-    AgentA -->|Structured fact pack| AgentB[Agent B · Refiner]
-    AgentB -->|Polished student-facing answer| Flask[Flask Backend]
-    Flask -->|Sanitized response| UI[Frontend]
-    UI -->|Displays answer| User
+flowchart LR
+    Browser[Existing BLS web UI] --> Flask[Existing Flask API]
+    Flask --> Prompt[Load instructions.txt + knowledgebase.md]
+    Prompt --> ATLAS[ATLAS /v1/chat/completions]
+    ATLAS --> Flask
+    Flask --> Browser
 ```
 
----
+This replaces the previous dual-Agent/LangChain flow. There is no Agent A,
+Agent B, `course_name`, `retrieval_only`, or second refinement request in the
+active web path.
 
-## Tech Stack
+## Reference implementation
 
-- **Backend:** Python, Flask, LangChain, Requests
-- **Frontend:** Vanilla HTML/CSS/JS (no framework required)
-- **LLM API:** [chat.illinois.edu](https://chat.illinois.edu) — free NCSA-hosted model with document retrieval
-- **Default model:** `Qwen/Qwen2.5-VL-72B-Instruct`
+The ATLAS integration follows `chat_illinois_cli` at commit
+`ab9826ae32db6d9fb02b8792fbb131b4d3c63481` (October 30, 2026):
 
----
+- API: `https://sequitor01.atlas.illinois.edu/v1/chat/completions`
+- Authentication: `Authorization: Bearer <PEAR key>`
+- System prompt: `instructions.txt + "\n" + knowledgebase.md`
+- Request parameters: `model`, `temperature`, and `reasoning_effort`
+- Optional context: include the previous assistant answer when
+  `ATLAS_USE_LAST_RESPONSE=true`
+- Response: `choices[0].message.content`
+
+The reusable adaptation is in [`atlas_chat.py`](atlas_chat.py). It uses only
+Python standard-library HTTP code, as the reference CLI does.
 
 ## Setup
 
-### 1. Clone and install dependencies
+1. Create and activate a Python virtual environment.
+2. Install dependencies:
 
-```bash
-git clone https://github.com/aakashkolli/bls-chatbot.git
-cd bls-chatbot
-python -m venv venv
-source venv/bin/activate       # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### 2. Configure environment variables
+3. Copy `.env.example` to `.env`.
+4. Put the API key supplied through PEAR in `ATLAS_API_KEY`.
+5. Start Flask:
 
-Create a `.env` file in the project root:
+   ```bash
+   python app.py
+   ```
 
-```env
-UIUC_CHAT_API_KEY=your_api_key_here
-COURSE_NAME=bls-chatbot-v2
-MODEL=Qwen/Qwen2.5-VL-72B-Instruct
-```
+6. Open <http://localhost:5001>.
 
-> Get your API key from [chat.illinois.edu](https://chat.illinois.edu).
+The floating widget remains at <http://localhost:5001/widget>, and the existing
+embed script remains at <http://localhost:5001/embed.js>.
 
----
+## Configuration
 
-## Main Script — `scripts/bls_chat.py`
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ATLAS_API_KEY` | none | Required Bearer token supplied via PEAR |
+| `ATLAS_API_URL` | `https://sequitor01.atlas.illinois.edu/v1/chat/completions` | ATLAS OpenAI-compatible endpoint |
+| `ATLAS_MODEL` | `qwen3.8-27b` | Model served by the ATLAS server |
+| `ATLAS_TEMPERATURE` | `0.1` | Sampling temperature from 0.0 to 2.0 |
+| `ATLAS_REASONING_EFFORT` | `low` | Current supported values: `low`, `medium`, `xhigh` |
+| `ATLAS_USE_LAST_RESPONSE` | `false` | Include the previous assistant answer before the new user question |
+| `ATLAS_INSTRUCTIONS_FILE` | `config/instructions.txt` | First part of the system prompt |
+| `ATLAS_KNOWLEDGE_BASE_FILE` | `config/knowledgebase.md` | Markdown knowledge base appended to the instructions |
+| `ATLAS_TIMEOUT_SECONDS` | `60` | HTTP timeout |
 
-**Location:** [`scripts/bls_chat.py`](scripts/bls_chat.py)
+Relative prompt paths are resolved from the project root, so startup does not
+depend on the current working directory. `/api/config` returns the active
+non-secret settings for diagnostics and never returns the key.
 
-This is the core chatbot logic. It runs the full dual-agent pipeline as a standalone interactive CLI — no server or browser required. It contains the canonical system prompts (Agent A and Agent B) and the `sanitize_user_response()` function used by the web backend.
+## Updating the prompt or knowledge base
 
-**What it does:**
+Edit either:
 
-1. Takes your question as input
-2. Sends it to Agent A (Retriever) → structured fact extraction from BLS documents
-3. Passes Agent A's output to Agent B (Refiner) → clean, student-facing answer
-4. Prints the final response
+- [`config/instructions.txt`](config/instructions.txt)
+- [`config/knowledgebase.md`](config/knowledgebase.md)
 
-**Run:**
+The files are loaded for every request, matching the reference CLI's `reload`
+workflow while allowing edits to take effect without restarting Flask.
 
-```bash
-cd /Users/kolli/bls-chatbot
-source venv/bin/activate
-python scripts/bls_chat.py
-```
-
-**Example session:**
-
-```text
-BLS Virtual Advisor  |  model: Qwen/Qwen2.5-VL-72B-Instruct  |  course: bls-chatbot-v2
-Type 'quit' or 'exit' to stop.
-
-You: How much does the BLS program cost?
-[Agent A] Retrieving facts...
-[Agent B] Refining response...
-
-Advisor:
-- **Tuition per credit:** $433 ...
-```
-
----
-
-## Frontend Components
-
-All three Flask-served components share the same backend. Start it first:
-
-```bash
-cd /Users/kolli/bls-chatbot
-source venv/bin/activate
-python app.py
-# Server starts at http://localhost:5001
-```
-
-> **Note:** Port 5001 is used because macOS reserves port 5000 for AirPlay Receiver.
-
----
-
-### 1. Full-Page Chat Interface
-
-**File:** [`frontend/index.html`](frontend/index.html)
-**URL:** `http://localhost:5001/`
-
-The primary chat interface — a full-viewport page showing the conversation, agent pipeline status, and a message input area.
-
-**Features:**
-
-- Live **Agent A → Agent B pipeline bar** that appears during processing, with animated pulse dots showing which agent is active
-- **Typewriter streaming effect** — bot responses animate in character-by-character once the pipeline completes
-- Quick-question chips on first load for common BLS questions
-- Auto-resizing textarea, per-message timestamps
-- Illinois navy + orange branding
-
-**Screenshot layout:**
-
-```text
-┌─────────────────────────────────────────┐
-│  🎓 BLS Virtual Advisor   ● AI Online   │  ← top bar
-├─────────────────────────────────────────┤
-│  ● Agent A · Retriever → Agent B ·      │  ← pipeline bar (visible during processing)
-├─────────────────────────────────────────┤
-│                                         │
-│   [Bot message]                         │  ← messages
-│                        [User message]   │
-│                                         │
-├─────────────────────────────────────────┤
-│  [ Type your question...        ] Send  │  ← input
-└─────────────────────────────────────────┘
-```
-
----
-
-### 2. Floating Widget
-
-**File:** [`frontend/widget.html`](frontend/widget.html)
-**URL:** `http://localhost:5001/widget`
-
-A self-contained floating chat bubble and panel. Designed to be embedded inside an `<iframe>` on any external webpage. Manages its own open/close state internally.
-
-**Features:**
-
-- Circular floating button (bottom-right corner) with spring open/close animation
-- Notification badge on first load
-- Same agent pipeline bar and typewriter streaming as the full-page version
-- "Online" status indicator in the header
-- Compact 390×580 px panel — fits cleanly inside an iframe
-
-**View it standalone:**
-
-```text
-http://localhost:5001/widget
-```
-
----
-
-### 3. Embeddable Script
-
-**File:** [`frontend/embed.js`](frontend/embed.js)
-**URL:** `http://localhost:5001/embed.js`
-
-A single `<script>` tag that injects the widget iframe into **any** external webpage — no framework, no build step required.
-
-**Usage — add to any HTML page:**
-
-```html
-<script src="http://localhost:5001/embed.js"></script>
-```
-
-The script automatically:
-
-1. Creates a fixed-position `<iframe>` pointing to `/widget`
-2. Appends it to `<body>` once the DOM is ready
-3. The chat bubble appears bottom-right — fully functional
-
-**Example host page:**
-
-```html
-<!DOCTYPE html>
-<html>
-<head><title>My Page</title></head>
-<body>
-  <h1>Welcome to the BLS program page</h1>
-  <!-- BLS advisor widget -->
-  <script src="http://localhost:5001/embed.js"></script>
-</body>
-</html>
-```
-
----
-
-### 4. Next.js Embed Host
-
-**File:** [`frontend/embed-nextjs/`](frontend/embed-nextjs/)
-**URL:** `http://localhost:3000` (runs separately from Flask)
-
-A Next.js application that serves as a React-based host for the embedded widget. Runs independently of the Flask server.
-
-**Run:**
-
-```bash
-cd /Users/kolli/bls-chatbot/frontend/embed-nextjs
-npm install
-npm run dev
-# Opens at http://localhost:3000
-```
-
-> The Flask backend (`python app.py`) must also be running for the embedded widget to function.
-
----
-
-## API Endpoints
+## API endpoints
 
 | Method | Endpoint | Description |
-| ------ | -------- | ----------- |
-| `GET` | `/` | Full-page chat UI |
-| `GET` | `/widget` | Floating widget UI |
-| `GET` | `/embed.js` | Embeddable script |
-| `POST` | `/api/stream` | **SSE stream** — emits agent status events then the final answer |
-| `POST` | `/api/chat` | Non-streaming JSON response (widget fallback) |
-| `POST` | `/api/ask` | Non-streaming JSON response (full-page fallback) |
+| --- | --- | --- |
+| `GET` | `/` | Existing full-page BLS chat UI |
+| `GET` | `/widget` | Existing floating widget UI |
+| `GET` | `/embed.js` | Existing embeddable widget loader |
+| `GET` | `/api/config` | Non-secret ATLAS runtime settings |
+| `POST` | `/api/stream` | Existing SSE contract, backed by one ATLAS request |
+| `POST` | `/api/chat` | Existing widget JSON fallback |
+| `POST` | `/api/ask` | Existing full-page JSON fallback |
 
-### `/api/stream` event format
+Request body:
 
-The frontend connects to this endpoint via the [Fetch Streaming API](https://developer.mozilla.org/en-US/docs/Web/API/Streams_API). Events are Server-Sent Events (SSE):
-
-```text
-data: {"type": "agent_status", "agent": "A", "message": "Retrieving facts from BLS documents…"}
-
-data: {"type": "agent_status", "agent": "B", "message": "Refining response for you…"}
-
-data: {"type": "answer", "content": "The BLS program costs ..."}
-
-data: {"type": "done"}
+```json
+{
+  "query": "How much does the BLS program cost?",
+  "last_response": "Optional previous assistant answer"
+}
 ```
 
----
+`last_response` is ignored unless `ATLAS_USE_LAST_RESPONSE=true`.
 
-## Project Structure
+## Command-line client
+
+The CLI now shares the same client and configuration as Flask:
+
+```bash
+python bls_chat.py
+```
+
+`python scripts/bls_chat.py` remains available as a compatibility entry point.
+
+## Project structure
 
 ```text
 bls-chatbot/
-├── app.py                          # Flask server — routes, dual-agent pipeline, SSE endpoint
-├── scripts/
-│   └── bls_chat.py                 # ★ Main chatbot script — CLI, canonical prompts, sanitizer
-├── frontend/
-│   ├── index.html                  # Full-page chat UI
-│   ├── widget.html                 # Floating embeddable widget
-│   ├── embed.js                    # Drop-in embed script
-│   └── embed-nextjs/               # Next.js host app
+├── app.py                       # Existing Flask routes, now using ATLAS
+├── atlas_chat.py                # Adapted chat_illinois_cli request logic
+├── bls_chat.py                  # Interactive CLI using the shared client
 ├── config/
-│   └── system_prompts.json         # Exported system prompts
-├── bls_model_eval_pipeline/        # Evaluation scripts and result JSONs
-├── requirements.txt
-├── .env                            # Not committed — add your keys here
-└── README.md
+│   ├── instructions.txt         # System instructions
+│   └── knowledgebase.md         # BLS Markdown knowledge base
+├── frontend/                    # Existing web UI and widget
+├── scripts/bls_chat.py          # Compatibility CLI entry point
+├── tests/                       # Unit and Flask contract tests
+├── .env.example
+└── requirements.txt
 ```
-
----
-
-## Environment Variables
-
-| Variable | Required | Default | Description |
-| -------- | -------- | ------- | ----------- |
-| `UIUC_CHAT_API_KEY` | Yes | — | API key for chat.illinois.edu |
-| `COURSE_NAME` | Yes | `bls-chatbot-v2` | Course namespace for document retrieval |
-| `MODEL` | No | `Qwen/Qwen2.5-VL-72B-Instruct` | LLM model name |
-| `GEMINI_API_KEY` | No | — | Optional — enables Gemini model routing |

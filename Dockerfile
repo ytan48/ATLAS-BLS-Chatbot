@@ -9,6 +9,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
+COPY atlas_chat.py .
+COPY config/ ./config/
 COPY frontend/ ./frontend/
 
 RUN adduser --disabled-password --gecos "" appuser

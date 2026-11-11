@@ -105,6 +105,32 @@ fail to load, the renderer escapes output as plain text. Internal service errors
 are logged server-side and generic messages are returned to browsers. Run with
 Gunicorn and HTTPS in production; the local development launcher disables debug.
 
+## Automated tests
+
+After installing `requirements.txt`, run all Python tests:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+Run only the dedicated security regressions:
+
+```powershell
+python -m unittest discover -s tests -p "test_security.py" -v
+```
+
+The security suite uses Flask's test client and mocked upstream requests. It
+needs no ATLAS API key, VPN, GPU server, or Redis instance. Run with the default
+`CHAT_RATE_LIMIT=10 per minute` and `RATELIMIT_STORAGE_URI=memory://` settings.
+It checks malformed and oversized requests, boundary values, provider-setting
+tampering, rate-limit bypass attempts, private error disclosure, connection
+timeouts, file traversal, and SSE event injection. These tests check application
+controls, not the model's resistance to prompt injection or browser XSS.
+The separate `tests/test_safe_markdown.cjs` suite covers Markdown sanitization.
+
+GitHub Actions runs the full Python suite on pushes and pull requests using
+`.github/workflows/python-tests.yml`. No repository secrets are required.
+
 ## Updating the prompt or knowledge base
 
 Edit either:

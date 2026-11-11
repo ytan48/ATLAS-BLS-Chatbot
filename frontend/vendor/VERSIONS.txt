@@ -1,0 +1,6 @@
+Vendored from the published npm packages:
+dompurify 3.4.17 — dist/purify.min.js
+marked 18.2.0 — lib/marked.umd.js
+
+Licenses are included alongside the assets. Review upstream security releases
+and update the assets and this manifest together.

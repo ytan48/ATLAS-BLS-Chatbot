@@ -81,6 +81,30 @@ Relative prompt paths are resolved from the project root, so startup does not
 depend on the current working directory. `/api/config` returns the active
 non-secret settings for diagnostics and never returns the key.
 
+## Security and deployment
+
+Chat requests are limited to 64 KiB bodies, 4,000-character questions, and
+16,000-character previous answers. All three chat routes share a per-client
+limit of 10 requests per minute, adjustable through `CHAT_RATE_LIMIT`.
+Set `RATELIMIT_STORAGE_URI=redis://your-redis-host:6379/0` in production:
+the development `memory://` store is per worker and resets on restart.
+Rate limiting uses the socket client address and deliberately ignores forwarded
+IP headers. Behind a reverse proxy, configure trusted proxy handling at the
+deployment layer; otherwise clients share the proxy's rate limit. Never trust
+arbitrary client-supplied forwarding headers. Add edge/global traffic limits
+to protect GPU capacity against distributed clients.
+
+CORS is disabled by default. The served HTML and iframe widget use same-origin
+API calls. For separately hosted clients, set `CHAT_ALLOWED_ORIGINS` to exact,
+comma-separated origins. CORS is browser policy, not API authentication.
+
+The HTML clients use locally vendored Marked and DOMPurify, with a restricted
+formatting/link allowlist. Model-supplied images, scripts, styles, and event
+handlers are removed. Keep these vendored dependencies updated. If the libraries
+fail to load, the renderer escapes output as plain text. Internal service errors
+are logged server-side and generic messages are returned to browsers. Run with
+Gunicorn and HTTPS in production; the local development launcher disables debug.
+
 ## Updating the prompt or knowledge base
 
 Edit either:

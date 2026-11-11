@@ -417,7 +417,9 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="/assets/marked.js"></script>
+<script src="/assets/purify.min.js"></script>
+<script src="/assets/safe-markdown.js"></script>
 <script>
   const msgsEl   = document.getElementById('messages');
   const inputEl  = document.getElementById('user-input');
@@ -533,7 +535,7 @@
   function appendBot(md) {
     const row = mk('div', 'msg-row bot');
     const msg = mk('div', 'message bot-msg');
-    msg.innerHTML = marked.parse(md);
+    msg.innerHTML = safeMarkdown(md);
     const t = mk('div', 'msg-time'); t.textContent = now();
     row.append(msg, t);
     msgsEl.appendChild(row);
@@ -559,10 +561,10 @@
     const chars = [...content];
     let i = 0, acc = '';
     function tick() {
-      if (i >= chars.length) { msg.innerHTML = marked.parse(acc); scrollDown(); return; }
+      if (i >= chars.length) { msg.innerHTML = safeMarkdown(acc); scrollDown(); return; }
       const burst = Math.min(5, chars.length - i);
       for (let b = 0; b < burst; b++) acc += chars[i++];
-      msg.innerHTML = marked.parse(acc) + '<span class="stream-cursor"></span>';
+      msg.innerHTML = safeMarkdown(acc) + '<span class="stream-cursor"></span>';
       scrollDown();
       requestAnimationFrame(tick);
     }
@@ -590,7 +592,7 @@
     msg.removeAttribute('role');
     msg.removeAttribute('aria-label');
     msg.removeAttribute('aria-live');
-    msg.innerHTML = marked.parse(md);
+    msg.innerHTML = safeMarkdown(md);
     if (!row.querySelector('.msg-time')) {
       const t = mk('div', 'msg-time');
       t.textContent = now();

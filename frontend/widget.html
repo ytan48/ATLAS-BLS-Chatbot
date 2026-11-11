@@ -518,7 +518,9 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="/assets/marked.js"></script>
+<script src="/assets/purify.min.js"></script>
+<script src="/assets/safe-markdown.js"></script>
 <script>
   const panel     = document.getElementById('chat-panel');
   const bubble    = document.getElementById('chat-bubble');
@@ -661,7 +663,7 @@
   function appendBot(md, isMarkdown = true) {
     const row = el('div', 'msg-row bot');
     const msg = el('div', 'message bot-msg');
-    msg.innerHTML = isMarkdown ? marked.parse(md) : md;
+    msg.innerHTML = safeMarkdown(md);
     const t = el('div', 'msg-time');
     t.textContent = timeNow();
     row.appendChild(msg);
@@ -693,14 +695,14 @@
 
     function tick() {
       if (i >= chars.length) {
-        msg.innerHTML = marked.parse(acc);
+        msg.innerHTML = safeMarkdown(acc);
         scrollDown();
         return;
       }
       // Consume a burst of chars per frame for faster feel
       const burst = Math.min(4, chars.length - i);
       for (let b = 0; b < burst; b++) acc += chars[i++];
-      msg.innerHTML = marked.parse(acc) + '<span class="stream-cursor"></span>';
+      msg.innerHTML = safeMarkdown(acc) + '<span class="stream-cursor"></span>';
       scrollDown();
       requestAnimationFrame(tick);
     }
@@ -728,7 +730,7 @@
     msg.removeAttribute('role');
     msg.removeAttribute('aria-label');
     msg.removeAttribute('aria-live');
-    msg.innerHTML = marked.parse(md);
+    msg.innerHTML = safeMarkdown(md);
     if (!row.querySelector('.msg-time')) {
       const t = el('div', 'msg-time');
       t.textContent = timeNow();

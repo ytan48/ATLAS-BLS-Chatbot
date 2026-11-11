@@ -7,5 +7,8 @@ bls_model_eval_pipeline/
 frontend/embed-nextjs/
 node_modules/
 .git/
+.security-venv/
+.uv-cache/
+.uv-python/
 *.md
 !config/knowledgebase.md

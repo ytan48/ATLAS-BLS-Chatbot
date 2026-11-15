@@ -77,8 +77,8 @@ export default function EmbedChatWidget() {
 
   return (
     <main className="mx-auto w-full max-w-[400px] p-3">
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-widget">
-        <header className="border-b-4 border-ilOrange bg-gradient-to-r from-ilBlueLight to-ilBlue px-4 py-3 text-white">
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-ilStormLight shadow-widget">
+        <header className="bg-ilBlue px-4 py-3 text-white">
           <h1 className="text-sm font-semibold tracking-wide">BLS Virtual Advisor</h1>
           <p className="mt-1 text-xs text-slate-100">University of Illinois Online</p>
         </header>
@@ -89,8 +89,8 @@ export default function EmbedChatWidget() {
               key={`${msg.role}-${idx}`}
               className={`rounded-xl p-3 text-sm leading-relaxed ${
                 msg.role === 'assistant'
-                  ? 'border border-slate-200 bg-white text-slate-800'
-                  : 'ml-8 bg-ilOrange font-medium text-ilBlue shadow-[0_3px_12px_rgba(255,95,5,0.24)]'
+                  ? 'border border-slate-200 bg-white text-ilBlue'
+                  : 'ml-8 border border-ilBlue80 bg-ilBlue90 font-medium text-ilBlue'
               }`}
             >
               <p>{msg.content}</p>
@@ -98,7 +98,7 @@ export default function EmbedChatWidget() {
                 <button
                   type="button"
                   onClick={() => copyMessage(msg.content, idx)}
-                  className="mt-2 inline-flex rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 transition hover:border-ilOrange hover:bg-orange-50 hover:text-ilBlue"
+                  className="mt-2 inline-flex rounded-md border border-ilBlue30 px-2 py-1 text-xs text-ilBlue transition hover:bg-ilBlue90"
                 >
                   {copiedIndex === idx ? 'Copied' : 'Copy to Clipboard'}
                 </button>
@@ -130,7 +130,7 @@ export default function EmbedChatWidget() {
             value={query}
             onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setQuery(e.target.value)}
             placeholder="Ask about transfer credits, ACE 240, tuition, or advising..."
-            className="w-full resize-none rounded-lg border border-slate-300 p-2 text-sm outline-none transition focus:border-ilBlue focus:ring-2 focus:ring-ilOrange/20"
+            className="w-full resize-none rounded-lg border border-ilBlue30 bg-white p-2 text-sm text-ilBlue outline-none transition placeholder:text-ilStorm30 focus:border-ilBlue30"
           />
           <div className="mt-2 flex items-center justify-between gap-2">
             <a
@@ -143,7 +143,7 @@ export default function EmbedChatWidget() {
               type="button"
               onClick={sendMessage}
               disabled={loading || !query.trim()}
-              className="rounded-lg bg-ilBlue px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#0E0F20] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ilOrange disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg bg-ilBlue px-3 py-2 text-xs font-semibold text-white transition hover:bg-ilBlue30 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Send
             </button>

@@ -7,9 +7,13 @@ const config: Config = {
       colors: {
         ilBlue: '#13294B',
         ilBlueLight: '#1D58A7',
+        ilBlue30: '#2F4668',
+        ilBlue80: '#B5C8E2',
+        ilBlue90: '#E1E7F1',
         ilOrange: '#FF5F05',
         ilAltgeld: '#C84113',
         ilStorm: '#707372',
+        ilStorm30: '#474948',
         ilStormLight: '#F4F4F4'
       },
       boxShadow: {

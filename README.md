@@ -25,7 +25,8 @@ active web path.
 
 The ATLAS integration follows `chat_illinois_cli` (October 30, 2026):
 
-- System prompt: `instructions.txt + "\n" + knowledgebase.md`
+- System prompt: `instructions.txt` 
+- knowledge base: `knowledgebase.md`
 - Request parameters: `model`, `temperature`, and `reasoning_effort`
 - Optional context: include the previous assistant answer when
   `ATLAS_USE_LAST_RESPONSE=true`

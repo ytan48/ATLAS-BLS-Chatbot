@@ -182,7 +182,7 @@
       flex-direction: column;
       gap: 16px;
       background: var(--uiuc-storm-95);
-      scroll-behavior: smooth;
+      scroll-behavior: auto;
     }
     .messages::-webkit-scrollbar { width: 5px; }
     .messages::-webkit-scrollbar-track { background: transparent; }
@@ -296,6 +296,7 @@
 
     /* ── Input area ───────────────────────────────────── */
     .input-area {
+      position: relative;
       border-top: 1px solid var(--border);
       background: white;
       padding: 14px 20px 16px;
@@ -371,6 +372,33 @@
       font-size: 0.9em;
       font-family: inherit;
     }
+    .new-message-pill {
+      position: absolute;
+      bottom: calc(100% + 12px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      padding: 6px 14px;
+      border: 1px solid #2F4668;
+      border-radius: 999px;
+      background: #13294B;
+      color: #FFFFFF;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(19, 41, 75, 0.2);
+    }
+    .new-message-pill:hover {
+      background: #1D3B6B;
+    }
+    .new-message-pill:focus-visible {
+      outline: 3px solid #FF5F05;
+      outline-offset: 2px;
+    }
+    .new-message-pill[hidden] {
+      display: none;
+    }
     button:focus-visible,
     textarea:focus-visible,
     a:focus-visible {
@@ -436,6 +464,9 @@
 
     <!-- Input -->
     <div class="input-area">
+      <button class="new-message-pill" id="new-message-pill" type="button" hidden>
+        ↓ New response
+      </button>
       <div class="input-row">
         <textarea id="user-input" rows="1" placeholder="Ask about tuition, admissions, transfer credits, concentrations…"></textarea>
         <button class="send-btn" id="send-btn" onclick="sendMessage()">
@@ -460,6 +491,7 @@
   const msgsEl   = document.getElementById('messages');
   const inputEl  = document.getElementById('user-input');
   const sendBtn  = document.getElementById('send-btn');
+  const newResponsePill = document.getElementById('new-message-pill');
   const agentBar = document.getElementById('agent-bar');
   const chipA    = document.getElementById('chip-a');
   const chipB    = document.getElementById('chip-b');
@@ -478,14 +510,27 @@
   inputEl.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   });
+  msgsEl.addEventListener('scroll', () => {
+    if (isNearBottom()) newResponsePill.hidden = true;
+  }, { passive: true });
+  newResponsePill.addEventListener('click', () => {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    msgsEl.scrollTo({
+      top: msgsEl.scrollHeight,
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    });
+    newResponsePill.hidden = true;
+  });
 
   // Agent bar
   function showAgent(agent, desc) {
+    const wasNearBottom = isNearBottom();
     agentBar.classList.add('visible');
     chipA.classList.remove('is-active', 'is-done');
     chipB.classList.remove('is-active', 'is-done');
     agent === 'A' ? chipA.classList.add('is-active') : (chipA.classList.add('is-done'), chipB.classList.add('is-active'));
     agentDesc.textContent = desc || 'Processing…';
+    if (wasNearBottom) requestAnimationFrame(() => scrollDown());
   }
   function hideAgentBar() {
     agentBar.classList.remove('visible');
@@ -498,6 +543,7 @@
     const text = inputEl.value.trim();
     if (!text || sendBtn.disabled) return;
 
+    newResponsePill.hidden = true;
     removeChips();
     appendUser(text);
     inputEl.value = '';
@@ -505,6 +551,9 @@
     sendBtn.disabled = true;
 
     const typingEl = appendTyping();
+    // Scroll only after both rows exist. Repeat on the next frame so the
+    // browser's completed layout cannot leave the typing indicator clipped.
+    forceScrollDown();
 
     try {
       const res = await fetch('/api/stream', {
@@ -534,12 +583,14 @@
           if (ev.type === 'agent_status') {
             showAgent(ev.agent, ev.message);
           } else if (ev.type === 'answer') {
+            const wasNearBottom = isNearBottom();
             hideAgentBar();
             lastResponse = ev.content || '';
-            streamEl = appendBotStreaming(ev.content || '', typingEl);
+            streamEl = appendBotStreaming(ev.content || '', typingEl, wasNearBottom);
           } else if (ev.type === 'error') {
+            const wasNearBottom = isNearBottom();
             hideAgentBar();
-            replaceTypingWithBot(typingEl, ev.message || 'Unable to generate a response. Please try again.');
+            replaceTypingWithBot(typingEl, ev.message || 'Unable to generate a response. Please try again.', wasNearBottom);
           } else if (ev.type === 'done') {
             hideAgentBar();
           }
@@ -550,8 +601,9 @@
         replaceTypingWithBot(typingEl, 'The advisor service returned an empty response. Please try again.');
       }
     } catch {
+      const wasNearBottom = isNearBottom();
       hideAgentBar();
-      replaceTypingWithBot(typingEl, 'I couldn\'t reach the advisor service. Please email **onlineBLS@illinois.edu** for help.');
+      replaceTypingWithBot(typingEl, 'I couldn\'t reach the advisor service. Please email **onlineBLS@illinois.edu** for help.', wasNearBottom);
     } finally {
       sendBtn.disabled = false;
       inputEl.focus();
@@ -565,21 +617,20 @@
     const t = mk('div', 'msg-time'); t.textContent = now();
     row.append(msg, t);
     msgsEl.appendChild(row);
-    scrollDown();
   }
 
-  function appendBot(md) {
+  function appendBot(md, wasNearBottom = isNearBottom()) {
     const row = mk('div', 'msg-row bot');
     const msg = mk('div', 'message bot-msg');
     msg.innerHTML = safeMarkdown(md);
     const t = mk('div', 'msg-time'); t.textContent = now();
     row.append(msg, t);
     msgsEl.appendChild(row);
-    scrollDown();
+    updateReplyScroll(wasNearBottom);
     return row;
   }
 
-  function appendBotStreaming(content, pendingRow = null) {
+  function appendBotStreaming(content, pendingRow = null, wasNearBottom = isNearBottom()) {
     const row = pendingRow?.isConnected ? pendingRow : mk('div', 'msg-row bot');
     const msg = pendingRow?.isConnected ? row.querySelector('.message') : mk('div', 'message bot-msg');
     msg.classList.remove('typing-bubble');
@@ -593,15 +644,21 @@
       t.textContent = now();
       row.append(msg, t);
     }
+    updateReplyScroll(wasNearBottom);
 
     const chars = [...content];
     let i = 0, acc = '';
     function tick() {
-      if (i >= chars.length) { msg.innerHTML = safeMarkdown(acc); scrollDown(); return; }
+      const wasNearBottom = isNearBottom();
+      if (i >= chars.length) {
+        msg.innerHTML = safeMarkdown(acc);
+        updateReplyScroll(wasNearBottom);
+        return;
+      }
       const burst = Math.min(5, chars.length - i);
       for (let b = 0; b < burst; b++) acc += chars[i++];
       msg.innerHTML = safeMarkdown(acc) + '<span class="stream-cursor"></span>';
-      scrollDown();
+      updateReplyScroll(wasNearBottom);
       requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
@@ -617,12 +674,11 @@
     bubble.innerHTML = '<span class="typing-dot" aria-hidden="true"></span><span class="typing-dot" aria-hidden="true"></span><span class="typing-dot" aria-hidden="true"></span>';
     row.appendChild(bubble);
     msgsEl.appendChild(row);
-    scrollDown();
     return row;
   }
 
-  function replaceTypingWithBot(row, md) {
-    if (!row?.isConnected) return appendBot(md);
+  function replaceTypingWithBot(row, md, wasNearBottom = isNearBottom()) {
+    if (!row?.isConnected) return appendBot(md, wasNearBottom);
     const msg = row.querySelector('.message');
     msg.classList.remove('typing-bubble');
     msg.removeAttribute('role');
@@ -634,7 +690,7 @@
       t.textContent = now();
       row.appendChild(t);
     }
-    scrollDown();
+    updateReplyScroll(wasNearBottom);
     return row;
   }
 
@@ -652,7 +708,27 @@
 
   function removeChips() { const c = document.getElementById('quick-chips'); if (c) c.remove(); }
   function mk(tag, cls) { const e = document.createElement(tag); if (cls) e.className = cls; return e; }
-  function scrollDown() { msgsEl.scrollTop = msgsEl.scrollHeight; }
+  function isNearBottom() {
+    return msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight <= 60;
+  }
+  function updateReplyScroll(wasNearBottom) {
+    if (wasNearBottom) {
+      newResponsePill.hidden = true;
+      scrollDown();
+    } else {
+      newResponsePill.hidden = false;
+    }
+  }
+  function scrollDown(smooth = false) {
+    msgsEl.scrollTo({
+      top: msgsEl.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto',
+    });
+  }
+  function forceScrollDown() {
+    scrollDown();
+    requestAnimationFrame(() => scrollDown());
+  }
   function now() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 </script>
 </body>

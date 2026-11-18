@@ -26,6 +26,9 @@ export default function EmbedChatWidget() {
     }
   ]);
   const [loading, setLoading] = useState(false);
+  const [limit, setLimit] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const count = Array.from(query).length;
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -33,33 +36,38 @@ export default function EmbedChatWidget() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [messages, loading]);
 
+  useEffect(() => {
+    const configUrl = chatApiUrl.replace(/\/api\/(chat|ask|stream)\/?(?:\?.*)?$/, '/api/input-config');
+    fetch(configUrl).then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then((data) => {
+        if (!Number.isInteger(data.max_question_chars) || data.max_question_chars < 1) throw new Error();
+        setLimit(data.max_question_chars);
+      }).catch(() => setError('Could not load the advisor settings. Please reload and try again.'));
+  }, [chatApiUrl]);
+
   const sendMessage = async () => {
-    const trimmed = query.trim();
-    if (!trimmed || loading) return;
-
-    const userMsg: Message = { role: 'user', content: trimmed };
-    setMessages((prev: Message[]) => [...prev, userMsg]);
-    setQuery('');
+    if (!query.trim() || loading || limit === null || count > limit) return;
+    const text = query;
+    setError('');
     setLoading(true);
-
     try {
       const response = await fetch(chatApiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: trimmed })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: text })
       });
-      const data = await response.json();
-
-      const assistantText = data?.answer || 'I could not process that request. Please try again.';
-      setMessages((prev: Message[]) => [...prev, { role: 'assistant', content: assistantText }]);
-    } catch {
-      setMessages((prev: Message[]) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: 'I could not reach the advisor service. For specific questions, contact the BLS office at bls@illinois.edu.'
-        }
-      ]);
+      let data: { answer?: string; code?: string } = {};
+      try { data = await response.json(); } catch { /* use a generic safe error */ }
+      if (!response.ok) {
+        if (response.status === 413 || data.code === 'question_too_long') throw new Error(`Your message exceeds the allowed size or ${limit.toLocaleString()}-character limit. Please shorten it or submit it in smaller sections.`);
+        if (response.status === 429) throw new Error('Too many requests. Please wait before trying again.');
+        if (response.status === 400) throw new Error('The request was invalid. Please check your message and try again.');
+        throw new Error('The advisor service is temporarily unavailable. Please try again.');
+      }
+      if (typeof data.answer !== 'string' || !data.answer) throw new Error('The advisor returned an empty response. Please try again.');
+      setMessages((prev) => [...prev, { role: 'user', content: text }, { role: 'assistant', content: data.answer as string }]);
+      setQuery('');
+    } catch (err) {
+      setError(err instanceof TypeError ? 'Could not connect to the advisor service. Please check your connection and try again.' : err instanceof Error ? err.message : 'The advisor service is unavailable. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -127,11 +135,17 @@ export default function EmbedChatWidget() {
           <textarea
             id="chat-input"
             rows={3}
+            disabled={loading}
+            aria-describedby="input-counter input-error"
             value={query}
             onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setQuery(e.target.value)}
             placeholder="Ask about transfer credits, ACE 240, tuition, or advising..."
             className="w-full resize-none rounded-lg border border-ilBlue30 bg-white p-2 text-sm text-ilBlue outline-none transition placeholder:text-ilStorm30 focus:border-ilBlue30"
           />
+          <div id="input-counter" aria-live="polite" className="text-xs text-ilBlue">
+            {limit === null ? 'Loading input limit...' : `${count.toLocaleString()} / ${limit.toLocaleString()} characters${count > limit ? ' - over the limit' : count >= limit * 0.9 ? ' - approaching the limit' : ''}`}
+          </div>
+          <div id="input-error" role="alert" className="text-xs text-red-700">{error}</div>
           <div className="mt-2 flex items-center justify-between gap-2">
             <a
               href="mailto:bls@illinois.edu"
@@ -142,7 +156,7 @@ export default function EmbedChatWidget() {
             <button
               type="button"
               onClick={sendMessage}
-              disabled={loading || !query.trim()}
+              disabled={loading || !query.trim() || limit === null || count > limit}
               className="rounded-lg bg-ilBlue px-3 py-2 text-xs font-semibold text-white transition hover:bg-ilBlue30 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Send

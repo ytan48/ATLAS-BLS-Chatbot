@@ -77,6 +77,7 @@ embed script remains at <http://localhost:5001/embed.js>.
 | `ATLAS_INSTRUCTIONS_FILE` | `config/instructions.txt` | First part of the system prompt |
 | `ATLAS_KNOWLEDGE_BASE_FILE` | `config/knowledgebase.md` | Markdown knowledge base appended to the instructions |
 | `ATLAS_TIMEOUT_SECONDS` | `60` | HTTP timeout |
+| `CHAT_MAX_QUESTION_CHARS` | `16000` | Maximum question length in Unicode code points; allowed range 1-32000 |
 
 Relative prompt paths are resolved from the project root, so startup does not
 depend on the current working directory. `/api/config` returns the active
@@ -84,16 +85,32 @@ non-secret settings for diagnostics and never returns the key.
 
 ## Security and deployment
 
-Chat requests are limited to 64 KiB bodies, 4,000-character questions, and
-16,000-character previous answers. All three chat routes share a per-client
+Chat requests are limited to 1 MiB bodies and, by default, 16,000 Unicode
+code points per question (formerly 64 KiB and 4,000 characters). Configure
+`CHAT_MAX_QUESTION_CHARS` from 1 to 32,000; invalid values prevent startup.
+`/api/input-config` exposes the active limit to all clients. A 1 MiB body
+accommodates the maximum configured question and 16,000-character previous
+answer even when supplementary Unicode is JSON escaped, with bounded overhead.
+HTML and Next.js clients show a code-point counter and preserve rejected drafts.
+They map known HTTP errors to safe messages and do not display server details.
+
+Previous-answer context is disabled by default. The HTML clients omit it when
+disabled; when enabled they send at most the latest assistant answer, and omit
+an oversized answer entirely while notifying the user. The API likewise omits
+an oversized previous answer and sets `X-BLS-Context-Omitted:
+previous-response-too-long`; it ignores the field when disabled. This never
+truncates the question. The Next.js client does not send previous responses.
+The model does not receive the preceding user messages or the full visible
+conversation, so essay follow-ups need the student to repeat relevant details.
+
+All three chat routes share a per-client
 limit of 10 requests per minute, adjustable through `CHAT_RATE_LIMIT`.
 Set `RATELIMIT_STORAGE_URI=redis://your-redis-host:6379/0` in production:
 the development `memory://` store is per worker and resets on restart.
 Rate limiting uses the socket client address and deliberately ignores forwarded
 IP headers. Behind a reverse proxy, configure trusted proxy handling at the
 deployment layer; otherwise clients share the proxy's rate limit. Never trust
-arbitrary client-supplied forwarding headers. Add edge/global traffic limits
-to protect GPU capacity against distributed clients.
+arbitrary client-supplied forwarding headers. GPU-side rate limiting may overlap with Flask-Limiter; verify its actual scope and deployment configuration before changing either protection. Add edge/global traffic limits as needed to protect GPU capacity against distributed clients.
 
 CORS is disabled by default. The served HTML and iframe widget use same-origin
 API calls. For separately hosted clients, set `CHAT_ALLOWED_ORIGINS` to exact,
@@ -191,3 +208,11 @@ bls-chatbot/
 ├── .env.example
 └── requirements.txt
 ```
+
+### Input validation tests
+
+Run `python -m unittest discover -s tests -v`. For browser-focused checks,
+run `node tests/test_input_frontend.cjs <path-to-jsdom-module>` and
+`node tests/test_safe_markdown.cjs <path-to-jsdom-module>`. These use mock
+responses; no GPU is contacted. See [the input validation report](INPUT_VALIDATION_REPORT.md)
+for results, limitations, and an optional authorized live-evaluation procedure.

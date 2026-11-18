@@ -55,7 +55,7 @@ class SecurityTests(unittest.TestCase):
     @patch("app.ask_atlas")
     def test_query_type_and_length_checks_cover_every_endpoint(self, model):
         for route in CHAT_ROUTES:
-            for query in (None, True, 123, [], {}, "", " \n\t", "x" * 4001):
+            for query in (None, True, 123, [], {}, "", " \n\t", "x" * 16001):
                 with self.subTest(route=route, query_type=type(query).__name__):
                     app_module.limiter.reset()
                     self.assertEqual(self.post(route, json={"query": query}).status_code, 400)
@@ -66,7 +66,7 @@ class SecurityTests(unittest.TestCase):
         for route in CHAT_ROUTES:
             with self.subTest(route=route):
                 response = self.post(route, json={
-                    "query": "x" * 4000, "last_response": "y" * 16000})
+                    "query": "x" * 16000, "last_response": "y" * 16000})
                 self.assertEqual(response.status_code, 200)
                 self.assertIn("Allowed answer", response.get_data(as_text=True))
         self.assertEqual(model.call_count, 3)
@@ -75,7 +75,7 @@ class SecurityTests(unittest.TestCase):
     def test_body_limit_cannot_be_bypassed_with_extra_fields(self, model):
         for route in CHAT_ROUTES:
             with self.subTest(route=route):
-                response = self.post(route, json={"query": "Hi", "padding": "x" * 65536})
+                response = self.post(route, json={"query": "Hi", "padding": "x" * 1048576})
                 self.assertEqual(response.status_code, 413)
                 self.assertEqual(response.get_json(), {"error": "Request is too large."})
         model.assert_not_called()

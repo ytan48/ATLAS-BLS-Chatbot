@@ -516,13 +516,15 @@
 
   <div class="panel-footer">
     <div class="input-row">
-      <textarea id="user-input" rows="1" placeholder="Ask about the BLS program…"></textarea>
+      <textarea aria-describedby="input-counter input-error" id="user-input" rows="1" placeholder="Ask about the BLS program…"></textarea>
       <button class="send-btn" id="send-btn" onclick="sendMessage()" aria-label="Send message">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
         </svg>
       </button>
     </div>
+      <div id="input-counter" aria-live="polite" style="font-size:12px;color:#555"></div>
+      <div id="input-error" role="alert" style="font-size:12px;color:#8b2700"></div>
     <div class="footer-note">
       Questions? <a href="mailto:onlineBLS@illinois.edu">onlineBLS@illinois.edu</a>
     </div>
@@ -532,6 +534,7 @@
 <script src="/assets/marked.js"></script>
 <script src="/assets/purify.min.js"></script>
 <script src="/assets/safe-markdown.js"></script>
+<script src="/assets/input-validation.js"></script>
 <script>
   const panel     = document.getElementById('chat-panel');
   const bubble    = document.getElementById('chat-bubble');
@@ -545,6 +548,25 @@
   const notif     = document.getElementById('notif-badge');
   let isOpen = false;
   let lastResponse = '';
+
+  let inputConfig = null;
+  let submitting = false;
+  const counter = document.getElementById('input-counter');
+  const inputError = document.getElementById('input-error');
+  function updateCounter() {
+    if (!inputConfig) { counter.textContent = 'Loading input limit...'; sendBtn.disabled = true; return; }
+    const count = BLSInput.count(input.value), limit = inputConfig.max_question_chars;
+    const warning = count > limit ? ' - over the limit' : count >= limit * 0.9 ? ' - approaching the limit' : '';
+    counter.textContent = `${count.toLocaleString()} / ${limit.toLocaleString()} characters${warning}`;
+    sendBtn.disabled = submitting || count > limit;
+  }
+  input.addEventListener('input', updateCounter);
+  fetch('/api/input-config').then(r => { if (!r.ok) throw Error(); return r.json(); }).then(config => {
+    if (!Number.isInteger(config.max_question_chars) || config.max_question_chars < 1) throw Error();
+    inputConfig = config; updateCounter();
+  }).catch(() => { counter.textContent = 'Input limit unavailable.'; inputError.textContent = 'Could not load the advisor settings. Please reload and try again.'; });
+  updateCounter();
+
 
   // Initial message + quick chips
   appendBot('Hi! I\'m the **BLS Virtual Advisor**. I can help with admissions, tuition, transfer credits, concentrations, and anything else about the **Bachelor of Liberal Studies** program at the University of Illinois.', true);
@@ -590,75 +612,52 @@
 
   // ── Send message ───────────────────────────────────────
   async function sendMessage() {
-    const text = input.value.trim();
-    if (!text || sendBtn.disabled) return;
-
-    removeChips();
-    appendUser(text);
-    input.value = '';
-    input.style.height = 'auto';
-    sendBtn.disabled = true;
-
+    const text = input.value;
+    if (!text.trim() || !inputConfig || submitting || BLSInput.count(text) > inputConfig.max_question_chars) return;
+    submitting = true; input.disabled = true; inputError.textContent = ''; updateCounter();
     const typingEl = appendTyping();
-
     try {
-      const res = await fetch('/api/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: text, last_response: lastResponse }),
-      });
-
-      if (!res.ok || !res.body) throw new Error('Bad response');
-
-      const reader  = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-      let streamEl = null;
-
+      const body = { query: text };
+      let omitted = false;
+      if (inputConfig.use_last_response && lastResponse) {
+        if (BLSInput.count(lastResponse) <= inputConfig.max_previous_response_chars) body.last_response = lastResponse;
+        else omitted = true;
+      }
+      const res = await fetch('/api/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!res.ok) {
+        let data = {}; try { data = await res.json(); } catch {}
+        throw new Error(BLSInput.message(res.status, data.code, inputConfig.max_question_chars));
+      }
+      if (!res.body) throw new Error('The advisor service returned an empty response. Please try again.');
+      const reader = res.body.getReader(), decoder = new TextDecoder();
+      let buf = '', answer = null, failure = false;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop();
-
+        const lines = buf.split('\n'); buf = lines.pop();
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (!raw) continue;
-          let ev;
-          try { ev = JSON.parse(raw); } catch { continue; }
-
-          if (ev.type === 'agent_status') {
-            showAgent(ev.agent, ev.message);
-          } else if (ev.type === 'answer') {
-            hideAgentBar();
-            lastResponse = ev.content || '';
-            streamEl = appendBotStreaming(ev.content || '', typingEl);
-          } else if (ev.type === 'error') {
-            hideAgentBar();
-            replaceTypingWithBot(typingEl, ev.message || 'Unable to generate a response. Please try again.');
-          } else if (ev.type === 'done') {
-            hideAgentBar();
-          }
+          let ev; try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+          if (ev.type === 'agent_status') showAgent(ev.agent, ev.message);
+          else if (ev.type === 'answer' && typeof ev.content === 'string') answer = ev.content;
+          else if (ev.type === 'error') failure = true;
         }
       }
-      if (typingEl.querySelector('.typing-bubble')) {
-        hideAgentBar();
-        replaceTypingWithBot(typingEl, 'The advisor service returned an empty response. Please try again.');
-      }
-
-    } catch {
-      hideAgentBar();
-      replaceTypingWithBot(typingEl, 'I couldn\'t reach the advisor service. Please email **onlineBLS@illinois.edu** for help.');
+      if (failure || answer === null) throw new Error('The advisor could not generate a response. Please try again.');
+      typingEl.remove(); removeChips(); appendUser(text);
+      lastResponse = answer;
+      appendBotStreaming(answer);
+      input.value = ''; input.style.height = 'auto';
+      if (omitted) inputError.textContent = 'The previous answer was too long to include as context. Please repeat any details needed for your follow-up.';
+    } catch (error) {
+      typingEl.remove();
+      inputError.textContent = error instanceof TypeError ? 'Could not connect to the advisor service. Please check your connection and try again.' : (error.message || 'The advisor service is unavailable. Please try again.');
     } finally {
-      sendBtn.disabled = false;
-      input.focus();
+      hideAgentBar(); submitting = false; input.disabled = false; updateCounter(); input.focus();
     }
   }
 
-  // ── Message helpers ────────────────────────────────────
   function appendUser(text) {
     const row = el('div', 'msg-row user');
     const msg = el('div', 'message user-msg');

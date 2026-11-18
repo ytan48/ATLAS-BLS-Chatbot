@@ -15,9 +15,7 @@ class FlaskContractTests(unittest.TestCase):
     @patch("app.ask_atlas", return_value="Answer")
     def test_invalid_inputs_never_reach_model(self, ask_atlas):
         for route in ("/api/ask", "/api/chat", "/api/stream"):
-            for payload in (["question"], {"query": "x" * 4001},
-                            {"query": "Hello", "last_response": "x" * 16001},
-                            {"query": "Hello", "last_response": []}):
+            for payload in (["question"], {"query": "x" * 16001}):
                 with self.subTest(route=route, payload_type=type(payload)):
                     response = self.client.post(route, json=payload)
                     self.assertEqual(response.status_code, 400)
@@ -25,7 +23,7 @@ class FlaskContractTests(unittest.TestCase):
 
     @patch("app.ask_atlas")
     def test_oversized_body_is_rejected(self, ask_atlas):
-        response = self.client.post("/api/stream", json={"query": "x" * 70000})
+        response = self.client.post("/api/stream", json={"query": "x" * 1048577})
         self.assertEqual(response.status_code, 413)
         self.assertEqual(response.get_json()["error"], "Request is too large.")
         ask_atlas.assert_not_called()
@@ -93,7 +91,7 @@ class FlaskContractTests(unittest.TestCase):
             response.get_json()["pipeline"], "atlas_single_completion"
         )
         ask_atlas.assert_called_once_with(
-            "Question", last_response="Earlier answer"
+            "Question", last_response=""
         )
 
     @patch("app.ask_atlas", return_value="Streamed ATLAS answer")

@@ -162,7 +162,7 @@ def build_payload(
     ]
     if settings.use_last_response and last_response.strip():
         messages.append({"role": "assistant", "content": last_response.strip()})
-    messages.append({"role": "user", "content": question.strip()})
+    messages.append({"role": "user", "content": question})
     return {
         "model": settings.model,
         "messages": messages,
@@ -191,8 +191,7 @@ def ask_atlas(
 ) -> str:
     """Send one BLS question to the ATLAS LLM server."""
 
-    question = question.strip()
-    if not question:
+    if not question.strip():
         raise ValueError("Question cannot be empty.")
 
     current_settings = settings or AtlasSettings.from_env()

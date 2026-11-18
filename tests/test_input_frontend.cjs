@@ -1,0 +1,51 @@
+﻿const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { TextDecoder, TextEncoder } = require('node:util');
+const { JSDOM } = require(path.resolve(process.argv[2]));
+const root = path.resolve(__dirname, '..');
+async function run(file) {
+  const html = fs.readFileSync(path.join(root, 'frontend', file), 'utf8');
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/', pretendToBeVisual: true });
+  const w = dom.window;
+  w.TextDecoder = TextDecoder;
+  w.HTMLElement.prototype.scrollTo = () => {};
+  w.requestAnimationFrame = cb => { cb(); return 1; };
+  w.safeMarkdown = text => text;
+  let attempts = 0;
+  w.fetch = async (url) => {
+    if (url === '/api/input-config') return {ok:true, json:async()=>({max_question_chars: 4, use_last_response:false, max_previous_response_chars:16000})};
+    attempts++;
+    if (attempts === 1) return {ok:false, status:429, json:async()=>({error:'private details'})};
+    let sent = false;
+    return {ok:true, body:{getReader:()=>({read:async()=> sent ? {done:true} : (sent = true, {done:false, value:new TextEncoder().encode('data: {"type":"answer","content":"OK"}\n\ndata: {"type":"done"}\n\n')})})}};
+  };
+  w.eval(fs.readFileSync(path.join(root, 'frontend/vendor/input-validation.js'), 'utf8'));
+  const scripts = [...w.document.querySelectorAll('script:not([src])')];
+  scripts.forEach(script => w.eval(script.textContent));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  const input = w.document.getElementById('user-input');
+  const counter = w.document.getElementById('input-counter');
+  const error = w.document.getElementById('input-error');
+  input.value = '🙂🙂🙂🙂🙂'; input.dispatchEvent(new w.Event('input'));
+  assert.match(counter.textContent, /5 \/ 4.*over the limit/);
+  assert.equal(w.document.getElementById('send-btn').disabled, true);
+  input.value = '🙂 abc'; input.dispatchEvent(new w.Event('input'));
+  assert.match(counter.textContent, /5 \/ 4/);
+  input.value = '🙂abc'; input.dispatchEvent(new w.Event('input'));
+  assert.match(counter.textContent, /4 \/ 4.*approaching/);
+  await w.sendMessage();
+  assert.equal(input.value, '🙂abc');
+  assert.match(error.textContent, /Too many requests/);
+  assert.doesNotMatch(error.textContent, /private/);
+  assert.equal(w.document.querySelectorAll('.user-msg').length, 0);
+  await w.sendMessage();
+  assert.equal(input.value, '');
+  assert.equal(w.document.querySelectorAll('.user-msg').length, 1);
+  assert.equal(attempts, 2);
+  assert.match(w.BLSInput.message(413, '', 4), /shorten/);
+  assert.match(w.BLSInput.message(400, '', 4), /invalid/);
+  dom.window.close();
+}
+(async () => { for (const file of ['index.html','widget.html']) await run(file); console.log('HTML counter, validation, draft preservation and retry checks passed.'); })().catch(err => {console.error(err); process.exitCode=1;});
+

@@ -8,19 +8,27 @@ import os
 from typing import Any
 
 from dotenv import load_dotenv
-from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
+from flask import Flask, Response, g, jsonify, request, send_from_directory, stream_with_context
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.exceptions import HTTPException
 
-from atlas_chat import AtlasAPIError, AtlasConfigurationError, AtlasSettings, ask_atlas
+from atlas_chat import AtlasAPIError, AtlasConfigurationError, AtlasSettings, ask_atlas, _env_bool
 
 
 load_dotenv()
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
+# Even JSON-escaped supplementary Unicode in both fields fits at these bounds.
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
+try:
+    app.config["CHAT_MAX_QUESTION_CHARS"] = int(os.getenv("CHAT_MAX_QUESTION_CHARS", "16000"))
+    if not 1 <= app.config["CHAT_MAX_QUESTION_CHARS"] <= 32000:
+        raise ValueError
+except ValueError as exc:
+    raise RuntimeError("CHAT_MAX_QUESTION_CHARS must be an integer from 1 to 32000.") from exc
+MAX_PREVIOUS_RESPONSE_CHARS = 16000
 allowed_origins = [
     origin.strip()
     for origin in os.getenv("CHAT_ALLOWED_ORIGINS", "").split(",")
@@ -53,11 +61,18 @@ def validate_chat_request():
     query = data.get("query", "")
     if not isinstance(query, str) or not query.strip():
         return jsonify(error="No query provided"), 400
-    if len(query) > 4000:
-        return jsonify(error="Question must be 4,000 characters or fewer."), 400
-    previous = data.get("last_response", "")
-    if not isinstance(previous, str) or len(previous) > 16000:
-        return jsonify(error="Invalid previous response."), 400
+    limit = app.config["CHAT_MAX_QUESTION_CHARS"]
+    if len(query) > limit:
+        return jsonify(error=f"Question must be {limit:,} characters or fewer.", code="question_too_long"), 400
+    try:
+        if _env_bool("ATLAS_USE_LAST_RESPONSE", False):
+            previous = data.get("last_response", "")
+            if not isinstance(previous, str):
+                return jsonify(error="Invalid previous response."), 400
+            if len(previous) > MAX_PREVIOUS_RESPONSE_CHARS:
+                g.previous_context_omitted = True
+    except AtlasConfigurationError as exc:
+        return _json_error(exc)
 
 
 @app.errorhandler(413)
@@ -74,6 +89,8 @@ def too_many_requests(exc):
 
 @app.after_request
 def security_headers(response):
+    if getattr(g, "previous_context_omitted", False):
+        response.headers["X-BLS-Context-Omitted"] = "previous-response-too-long"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     if request.path.startswith("/api/"):
@@ -91,8 +108,8 @@ def _answer_request(data: dict[str, Any]) -> str:
     if not isinstance(query, str) or not query.strip():
         raise ValueError("No query provided")
 
-    last_response = data.get("last_response", "")
-    if not isinstance(last_response, str):
+    last_response = data.get("last_response", "") if _env_bool("ATLAS_USE_LAST_RESPONSE", False) else ""
+    if not isinstance(last_response, str) or len(last_response) > MAX_PREVIOUS_RESPONSE_CHARS:
         last_response = ""
     return ask_atlas(query, last_response=last_response)
 
@@ -214,6 +231,16 @@ def stream_chat():
             "Connection": "keep-alive",
         },
     )
+
+
+@app.route("/api/input-config", methods=["GET"])
+def input_config():
+    try:
+        return jsonify(max_question_chars=app.config["CHAT_MAX_QUESTION_CHARS"],
+                       max_previous_response_chars=MAX_PREVIOUS_RESPONSE_CHARS,
+                       use_last_response=_env_bool("ATLAS_USE_LAST_RESPONSE", False))
+    except AtlasConfigurationError as exc:
+        return _json_error(exc)
 
 
 @app.route("/api/config", methods=["GET"])

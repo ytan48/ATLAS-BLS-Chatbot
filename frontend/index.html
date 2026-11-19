@@ -595,9 +595,10 @@
         }
       }
       if (failure || answer === null) throw new Error('The advisor could not generate a response. Please try again.');
+      const wasNearBottom = isNearBottom();
       typingEl.remove(); removeChips(); appendUser(text);
       lastResponse = answer;
-      appendBotStreaming(answer);
+      replaceTypingWithBot(typingEl, answer, wasNearBottom);
       inputEl.value = ''; inputEl.style.height = 'auto';
       if (omitted) inputError.textContent = 'The previous answer was too long to include as context. Please repeat any details needed for your follow-up.';
     } catch (error) {

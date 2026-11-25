@@ -49,6 +49,8 @@ export default function EmbedChatWidget() {
     if (!query.trim() || loading || limit === null || count > limit) return;
     const text = query;
     setError('');
+    setQuery('');
+    setMessages((prev) => [...prev, { role: 'user', content: text }]);
     setLoading(true);
     try {
       const response = await fetch(chatApiUrl, {
@@ -63,10 +65,12 @@ export default function EmbedChatWidget() {
         if (response.status === 400) throw new Error('The request was invalid. Please check your message and try again.');
         throw new Error('The advisor service is temporarily unavailable. Please try again.');
       }
-      if (typeof data.answer !== 'string' || !data.answer) throw new Error('The advisor returned an empty response. Please try again.');
-      setMessages((prev) => [...prev, { role: 'user', content: text }, { role: 'assistant', content: data.answer as string }]);
-      setQuery('');
+      const answer = data.answer;
+      if (typeof answer !== 'string' || !answer) throw new Error('The advisor returned an empty response. Please try again.');
+      setMessages((prev) => [...prev, { role: 'assistant', content: answer }]);
     } catch (err) {
+      setMessages((prev) => prev.slice(0, -1));
+      setQuery(text);
       setError(err instanceof TypeError ? 'Could not connect to the advisor service. Please check your connection and try again.' : err instanceof Error ? err.message : 'The advisor service is unavailable. Please try again.');
     } finally {
       setLoading(false);
@@ -139,6 +143,12 @@ export default function EmbedChatWidget() {
             aria-describedby="input-counter input-error"
             value={query}
             onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                void sendMessage();
+              }
+            }}
             placeholder="Ask about transfer credits, ACE 240, tuition, or advising..."
             className="w-full resize-none rounded-lg border border-ilBlue30 bg-white p-2 text-sm text-ilBlue outline-none transition placeholder:text-ilStorm30 focus:border-ilBlue30"
           />

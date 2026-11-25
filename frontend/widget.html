@@ -517,7 +517,7 @@
   <div class="panel-footer">
     <div class="input-row">
       <textarea aria-describedby="input-counter input-error" id="user-input" rows="1" placeholder="Ask about the BLS program…"></textarea>
-      <button class="send-btn" id="send-btn" onclick="sendMessage()" aria-label="Send message">
+      <button class="send-btn" id="send-btn" aria-label="Send message">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
         </svg>
@@ -587,8 +587,9 @@
     input.style.height = Math.min(input.scrollHeight, 96) + 'px';
   });
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); }
   });
+  sendBtn.addEventListener('click', () => sendMessage());
 
   // ── Agent bar ──────────────────────────────────────────
   function showAgent(agent, action) {
@@ -611,10 +612,15 @@
   }
 
   // ── Send message ───────────────────────────────────────
-  async function sendMessage() {
-    const text = input.value;
+  async function sendMessage(text = input.value) {
     if (!text.trim() || !inputConfig || submitting || BLSInput.count(text) > inputConfig.max_question_chars) return;
-    submitting = true; input.disabled = true; inputError.textContent = ''; updateCounter();
+    submitting = true;
+    input.disabled = true;
+    input.value = '';
+    input.style.height = 'auto';
+    inputError.textContent = '';
+    updateCounter();
+    const userRow = appendUser(text);
     const typingEl = appendTyping();
     try {
       const body = { query: text };
@@ -645,13 +651,15 @@
         }
       }
       if (failure || answer === null) throw new Error('The advisor could not generate a response. Please try again.');
-      typingEl.remove(); removeChips(); appendUser(text);
+      removeChips();
       lastResponse = answer;
-      appendBotStreaming(answer);
-      input.value = ''; input.style.height = 'auto';
+      appendBotStreaming(answer, typingEl);
       if (omitted) inputError.textContent = 'The previous answer was too long to include as context. Please repeat any details needed for your follow-up.';
     } catch (error) {
       typingEl.remove();
+      userRow.remove();
+      input.value = text;
+      input.dispatchEvent(new Event('input'));
       inputError.textContent = error instanceof TypeError ? 'Could not connect to the advisor service. Please check your connection and try again.' : (error.message || 'The advisor service is unavailable. Please try again.');
     } finally {
       hideAgentBar(); submitting = false; input.disabled = false; updateCounter(); input.focus();
@@ -667,7 +675,7 @@
     row.appendChild(msg);
     row.appendChild(t);
     messages.appendChild(row);
-    scrollDown();
+    return row;
   }
 
   function appendBot(md, isMarkdown = true) {
@@ -756,7 +764,7 @@
     qs.forEach(q => {
       const c = el('button', 'q-chip');
       c.textContent = q;
-      c.onclick = () => { input.value = q; sendMessage(); };
+      c.onclick = () => sendMessage(q);
       wrap.appendChild(c);
     });
     messages.appendChild(wrap);

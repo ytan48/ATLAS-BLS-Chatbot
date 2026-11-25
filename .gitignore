@@ -39,3 +39,5 @@ frontend/uiuc_logo.png
 # Ignore OS files
 .DS_Store
 !INPUT_VALIDATION_REPORT.md
+
+.chat-test-chrome/

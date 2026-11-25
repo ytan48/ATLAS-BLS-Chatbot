@@ -44,6 +44,11 @@ def widget():
     return send_from_directory(str(FRONTEND_DIR), 'widget.html')
 
 
+@app.route('/assets/<path:filename>')
+def frontend_asset(filename: str):
+    return send_from_directory(FRONTEND_DIR / 'vendor', filename)
+
+
 @app.route('/embed.js')
 def embed_js():
     return send_from_directory(str(FRONTEND_DIR), 'embed.js')

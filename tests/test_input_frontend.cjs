@@ -13,13 +13,18 @@ async function run(file) {
   w.requestAnimationFrame = cb => { cb(); return 1; };
   w.safeMarkdown = text => text;
   let attempts = 0;
-  w.fetch = async (url) => {
-    if (url === '/api/input-config') return {ok:true, json:async()=>({max_question_chars: 4, use_last_response:false, max_previous_response_chars:16000})};
+  let submittedQuery;
+  let resolveRequest;
+  w.fetch = async (url, options) => {
+    if (url === '/api/input-config') return {ok:true, json:async()=>({max_question_chars: 40, use_last_response:false, max_previous_response_chars:16000})};
     attempts++;
-    if (attempts === 1) return {ok:false, status:429, json:async()=>({error:'private details'})};
-    let sent = false;
-    return {ok:true, body:{getReader:()=>({read:async()=> sent ? {done:true} : (sent = true, {done:false, value:new TextEncoder().encode('data: {"type":"answer","content":"OK"}\n\ndata: {"type":"done"}\n\n')})})}};
+    submittedQuery = JSON.parse(options.body).query;
+    return new Promise(resolve => { resolveRequest = resolve; });
   };
+  function completeReply() {
+    let sent = false;
+    resolveRequest({ok:true, body:{getReader:()=>({read:async()=> sent ? {done:true} : (sent = true, {done:false, value:new TextEncoder().encode('data: {"type":"answer","content":"OK"}\n\ndata: {"type":"done"}\n\n')})})}});
+  }
   w.eval(fs.readFileSync(path.join(root, 'frontend/vendor/input-validation.js'), 'utf8'));
   const scripts = [...w.document.querySelectorAll('script:not([src])')];
   scripts.forEach(script => w.eval(script.textContent));
@@ -27,25 +32,66 @@ async function run(file) {
   const input = w.document.getElementById('user-input');
   const counter = w.document.getElementById('input-counter');
   const error = w.document.getElementById('input-error');
-  input.value = '🙂🙂🙂🙂🙂'; input.dispatchEvent(new w.Event('input'));
-  assert.match(counter.textContent, /5 \/ 4.*over the limit/);
-  assert.equal(w.document.getElementById('send-btn').disabled, true);
-  input.value = '🙂 abc'; input.dispatchEvent(new w.Event('input'));
-  assert.match(counter.textContent, /5 \/ 4/);
-  input.value = '🙂abc'; input.dispatchEvent(new w.Event('input'));
-  assert.match(counter.textContent, /4 \/ 4.*approaching/);
-  await w.sendMessage();
-  assert.equal(input.value, '🙂abc');
+  const send = w.document.getElementById('send-btn');
+  const chip = w.document.querySelector('.q-chip');
+  const question = chip.textContent;
+  const enter = (options = {}) => input.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', cancelable: true, ...options }));
+  const userMessages = () => [...w.document.querySelectorAll('.user-msg')].map(msg => msg.textContent);
+  function assertPending(text, expectedAttempts, previous = []) {
+    assert.equal(attempts, expectedAttempts);
+    assert.equal(submittedQuery, text);
+    assert.equal(input.value, '');
+    assert.equal(input.style.height, 'auto');
+    assert.equal(send.disabled, true);
+    assert.match(counter.textContent, /^0 \/ 40/);
+    assert.deepEqual(userMessages(), [...previous, text]);
+    assert.equal(w.document.querySelector('.typing-bubble').parentElement.previousElementSibling.querySelector('.user-msg').textContent, text);
+  }
+
+  input.value = '🙂'.repeat(41); input.dispatchEvent(new w.Event('input'));
+  assert.match(counter.textContent, /41 \/ 40.*over the limit/);
+  assert.equal(send.disabled, true);
+  enter();
+  assert.equal(attempts, 0);
+  input.value = '🙂'.repeat(39) + ' a'; input.dispatchEvent(new w.Event('input'));
+  assert.match(counter.textContent, /41 \/ 40/);
+  input.value = '🙂'.repeat(39) + 'a'; input.dispatchEvent(new w.Event('input'));
+  assert.match(counter.textContent, /40 \/ 40.*approaching/);
+  assert.equal(enter({ shiftKey: true }), true);
+  assert.equal(enter({ isComposing: true }), true);
+  assert.equal(attempts, 0);
+
+  chip.click();
+  assertPending(question, 1);
+  chip.click();
+  enter();
+  assertPending(question, 1);
+  resolveRequest({ok:false, status:429, json:async()=>({error:'private details'})});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(input.value, question);
   assert.match(error.textContent, /Too many requests/);
   assert.doesNotMatch(error.textContent, /private/);
-  assert.equal(w.document.querySelectorAll('.user-msg').length, 0);
-  await w.sendMessage();
+  assert.deepEqual(userMessages(), []);
+  assert.equal(w.document.querySelector('.typing-bubble'), null);
+
+  enter();
+  assertPending(question, 2);
+  completeReply();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(userMessages(), [question]);
+  assert.equal(w.document.querySelector('.typing-bubble'), null);
+  assert.equal([...w.document.querySelectorAll('.bot-msg')].at(-1).textContent, 'OK');
+
+  input.value = '🙂abc'; input.dispatchEvent(new w.Event('input'));
+  send.click();
+  assertPending('🙂abc', 3, [question]);
+  completeReply();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(userMessages(), [question, '🙂abc']);
   assert.equal(input.value, '');
-  assert.equal(w.document.querySelectorAll('.user-msg').length, 1);
-  assert.equal(attempts, 2);
   assert.match(w.BLSInput.message(413, '', 4), /shorten/);
   assert.match(w.BLSInput.message(400, '', 4), /invalid/);
   dom.window.close();
 }
-(async () => { for (const file of ['index.html','widget.html']) await run(file); console.log('HTML counter, validation, draft preservation and retry checks passed.'); })().catch(err => {console.error(err); process.exitCode=1;});
+(async () => { for (const file of ['index.html','widget.html']) await run(file); console.log('HTML validation, optimistic submission, draft restoration and retry checks passed.'); })().catch(err => {console.error(err); process.exitCode=1;});
 

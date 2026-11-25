@@ -1,177 +1,114 @@
 # BLS Virtual Advisor
 
-An AI-powered web chatbot for the University of Illinois **Bachelor of Liberal Studies (BLS)** program.
+The BLS Virtual Advisor is an AI-powered chatbot for the University of Illinois Bachelor of Liberal Studies (BLS) program. It answers questions about admissions, tuition, transfer credits, concentrations, and academic advising using the program's knowledge base.
 
-The original Flask service, full-page chatbot interface, floating widget, embed script, and overall web design are based on the [ATLAS-Illinois/bls-chatbot](https://github.com/ATLAS-Illinois/bls-chatbot) repository.
+- **Full-page chat and embeddable widget.** Open the advisor directly or add the floating widget to another site using the iframe loader. The repository also includes a Next.js widget.
+- **Single-hop ATLAS LLM integration.** Flask makes one OpenAI-compatible ATLAS completion request per accepted question, using the BLS instructions and knowledge base as the system prompt.
+- **Real-time status streaming.** The Flask-served HTML clients receive progress updates via server-sent events (SSE), followed by the complete answer once ATLAS returns it.
+- **Optimistic UI message rendering.** The chat shows the submitted question and a typing indicator immediately. If the request fails, the chat removes the pending entries and restores the question to the input for retry.
+- **Stratified randomized suggested questions.** Each chat loads up to four clickable prompts from a shared question bank. The picker randomly selects one question from each of up to four distinct categories, then fills any remaining slots with unique questions.
 
-The backend LLM integration and response pipeline have been updated based on [UIUCATLAS/chat_illinois_cli](https://github.com/UIUCATLAS/chat_illinois_cli). The updated implementation connects to the ATLAS LLM server using an OpenAI-compatible API and combines a local system prompt with a Markdown knowledge base to generate responses.
+The Flask service and web interfaces are based on [ATLAS-Illinois/bls-chatbot](https://github.com/ATLAS-Illinois/bls-chatbot). The shared ATLAS client follows the request format from [UIUCATLAS/chat_illinois_cli](https://github.com/UIUCATLAS/chat_illinois_cli).
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Browser[Existing BLS web UI] --> Flask[Existing Flask API]
-    Flask --> Prompt[Load instructions.txt + knowledgebase.md]
-    Prompt --> ATLAS[ATLAS /v1/chat/completions]
-    ATLAS --> Flask
-    Flask --> Browser
+    Browser["Chat client"] -->|"Submit question"| Flask["Flask API"]
+    Flask --> Validate["Validate input and apply the shared rate limit"]
+    Validate -->|"Accepted request"| Prompt["Build system prompt from instructions and knowledge base"]
+    Validate -->|"HTTP error on rejection"| Browser
+    Validate -.->|"SSE progress on /api/stream"| Browser
+    Prompt -->|"One completion request"| ATLAS["ATLAS /v1/chat/completions"]
+    ATLAS -->|"Complete response"| Reply["Flask response"]
+    Reply -->|"SSE answer or error, then done"| Browser
+    Reply -->|"JSON answer or error"| Browser
 ```
 
-This replaces the previous dual-Agent/LangChain flow. There is no Agent A,
-Agent B, `course_name`, `retrieval_only`, or second refinement request in the
-active web path.
+The full-page HTML chat and iframe widget use `/api/stream`. Once the stream opens, Flask sends `agent_status` events, followed by one `answer` or `error` event and a `done` event. The JSON endpoints support the Next.js widget and other clients that expect a complete JSON response.
 
-## Reference implementation
+[`atlas_chat.py`](atlas_chat.py) uses Python's standard-library HTTP client. It sends the system prompt and current question with the configured `model`, `temperature`, and `reasoning_effort`. When enabled and supplied, the previous assistant answer goes before the current question. The client reads the answer from `choices[0].message.content`.
 
-The ATLAS integration follows `chat_illinois_cli` (October 30, 2026):
+## Quick Start
 
-- System prompt: `instructions.txt` 
-- knowledge base: `knowledgebase.md`
-- Request parameters: `model`, `temperature`, and `reasoning_effort`
-- Optional context: include the previous assistant answer when
-  `ATLAS_USE_LAST_RESPONSE=true`
-- Response: `choices[0].message.content`
-
-The reusable adaptation is in [`atlas_chat.py`](atlas_chat.py). It uses only
-Python standard-library HTTP code, as the reference CLI does.
-
-## Setup
-
+Run these steps from the repository root.
 
 1. Create and activate a Python virtual environment.
-2. Install dependencies:
 
-  ```bash
-  pip install -r requirements.txt
-  ```
+   **PowerShell**
 
-3. Copy `.env.example` to `.env`. 
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
 
-  ```powershell
-  Copy-Item .env.example .env
-  # Fill in ATLAS_API_KEY in .env
-  .\venv\Scripts\python.exe app.py
-  ```
-4. Put the API key supplied through PEAR in `ATLAS_API_KEY`.
-5. Start Flask:
+   **macOS or Linux**
 
    ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+
+2. Install the dependencies.
+
+   ```sh
+   python -m pip install -r requirements.txt
+   ```
+
+3. Copy `.env.example` to `.env` (`Copy-Item .env.example .env` in PowerShell or `cp .env.example .env` on macOS or Linux). Set `ATLAS_API_KEY` to the token supplied through PEAR.
+4. Start Flask and open the [full-page chat](http://localhost:5001/).
+
+   ```sh
    python app.py
    ```
 
-6. Open <http://localhost:5001>.
+Flask listens on port `5001`. Preview the [floating widget at `/widget`](http://localhost:5001/widget). To embed the widget on a host page, load the [`/embed.js` script](http://localhost:5001/embed.js) from the Flask server.
 
-The floating widget remains at <http://localhost:5001/widget>, and the existing
-embed script remains at <http://localhost:5001/embed.js>.
+### Command-line client
+
+The interactive CLI uses the same ATLAS client and configuration as Flask.
+
+```sh
+python bls_chat.py
+```
+
+`python scripts/bls_chat.py` is a compatibility entry point.
 
 ## Configuration
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `ATLAS_API_KEY` | none | Required Bearer token supplied via PEAR |
+| `ATLAS_API_KEY` | None | Bearer token supplied through PEAR, required for ATLAS requests |
 | `ATLAS_API_URL` | `https://sequitor01.atlas.illinois.edu/v1/chat/completions` | ATLAS OpenAI-compatible endpoint |
 | `ATLAS_MODEL` | `qwen3.8-27b` | Model served by the ATLAS server |
 | `ATLAS_TEMPERATURE` | `0.1` | Sampling temperature from 0.0 to 2.0 |
-| `ATLAS_REASONING_EFFORT` | `low` | Current supported values: `low`, `medium`, `xhigh` |
-| `ATLAS_USE_LAST_RESPONSE` | `false` | Include the previous assistant answer before the new user question |
+| `ATLAS_REASONING_EFFORT` | `low` | Supported values are `low`, `medium`, and `xhigh` |
+| `ATLAS_USE_LAST_RESPONSE` | `false` | Include the supplied previous assistant answer before the new user question |
 | `ATLAS_INSTRUCTIONS_FILE` | `config/instructions.txt` | First part of the system prompt |
 | `ATLAS_KNOWLEDGE_BASE_FILE` | `config/knowledgebase.md` | Markdown knowledge base appended to the instructions |
-| `ATLAS_TIMEOUT_SECONDS` | `60` | HTTP timeout |
-| `CHAT_MAX_QUESTION_CHARS` | `16000` | Maximum question length in Unicode code points; allowed range 1-32000 |
+| `ATLAS_TIMEOUT_SECONDS` | `60` | ATLAS HTTP timeout in seconds, as a positive integer |
+| `CHAT_MAX_QUESTION_CHARS` | `16000` | Maximum question length in Unicode code points, as an integer from 1 to 32,000 |
+| `CHAT_RATE_LIMIT` | `10 per minute` | Per-client rate limit shared by the three chat routes |
+| `RATELIMIT_STORAGE_URI` | `memory://` | Flask-Limiter storage backend |
+| `CHAT_ALLOWED_ORIGINS` | Unset | Comma-separated list of exact browser origins allowed to call the API |
 
-Relative prompt paths are resolved from the project root, so startup does not
-depend on the current working directory. `/api/config` returns the active
-non-secret settings for diagnostics and never returns the key.
+Flask and the CLI resolve relative prompt paths from the project root. The diagnostic response at `/api/config` exposes non-secret settings, including whether an API key is configured.
 
-## Security and deployment
-
-Chat requests are limited to 1 MiB bodies and, by default, 16,000 Unicode
-code points per question (formerly 64 KiB and 4,000 characters). Configure
-`CHAT_MAX_QUESTION_CHARS` from 1 to 32,000; invalid values prevent startup.
-`/api/input-config` exposes the active limit to all clients. A 1 MiB body
-accommodates the maximum configured question and 16,000-character previous
-answer even when supplementary Unicode is JSON escaped, with bounded overhead.
-HTML and Next.js clients show a code-point counter and preserve rejected drafts.
-They map known HTTP errors to safe messages and do not display server details.
-
-Previous-answer context is disabled by default. The HTML clients omit it when
-disabled; when enabled they send at most the latest assistant answer, and omit
-an oversized answer entirely while notifying the user. The API likewise omits
-an oversized previous answer and sets `X-BLS-Context-Omitted:
-previous-response-too-long`; it ignores the field when disabled. This never
-truncates the question. The Next.js client does not send previous responses.
-The model does not receive the preceding user messages or the full visible
-conversation, so essay follow-ups need the student to repeat relevant details.
-
-All three chat routes share a per-client
-limit of 10 requests per minute, adjustable through `CHAT_RATE_LIMIT`.
-Set `RATELIMIT_STORAGE_URI=redis://your-redis-host:6379/0` in production:
-the development `memory://` store is per worker and resets on restart.
-Rate limiting uses the socket client address and deliberately ignores forwarded
-IP headers. Behind a reverse proxy, configure trusted proxy handling at the
-deployment layer; otherwise clients share the proxy's rate limit. Never trust
-arbitrary client-supplied forwarding headers. GPU-side rate limiting may overlap with Flask-Limiter; verify its actual scope and deployment configuration before changing either protection. Add edge/global traffic limits as needed to protect GPU capacity against distributed clients.
-
-CORS is disabled by default. The served HTML and iframe widget use same-origin
-API calls. For separately hosted clients, set `CHAT_ALLOWED_ORIGINS` to exact,
-comma-separated origins. CORS is browser policy, not API authentication.
-
-The HTML clients use locally vendored Marked and DOMPurify, with a restricted
-formatting/link allowlist. Model-supplied images, scripts, styles, and event
-handlers are removed. Keep these vendored dependencies updated. If the libraries
-fail to load, the renderer escapes output as plain text. Internal service errors
-are logged server-side and generic messages are returned to browsers. Run with
-Gunicorn and HTTPS in production; the local development launcher disables debug.
-
-## Automated tests
-
-After installing `requirements.txt`, run all Python tests:
-
-```powershell
-python -m unittest discover -s tests -v
-```
-
-Run only the dedicated security regressions:
-
-```powershell
-python -m unittest discover -s tests -p "test_security.py" -v
-```
-
-The security suite uses Flask's test client and mocked upstream requests. It
-needs no ATLAS API key, VPN, GPU server, or Redis instance. Run with the default
-`CHAT_RATE_LIMIT=10 per minute` and `RATELIMIT_STORAGE_URI=memory://` settings.
-It checks malformed and oversized requests, boundary values, provider-setting
-tampering, rate-limit bypass attempts, private error disclosure, connection
-timeouts, file traversal, and SSE event injection. These tests check application
-controls, not the model's resistance to prompt injection or browser XSS.
-The separate `tests/test_safe_markdown.cjs` suite covers Markdown sanitization.
-
-GitHub Actions runs the full Python suite on pushes and pull requests using
-`.github/workflows/python-tests.yml`. No repository secrets are required.
-
-## Updating the prompt or knowledge base
-
-Edit either:
-
-- [`config/instructions.txt`](config/instructions.txt)
-- [`config/knowledgebase.md`](config/knowledgebase.md)
-
-The files are loaded for every request, matching the reference CLI's `reload`
-workflow while allowing edits to take effect without restarting Flask.
-
-## API endpoints
+## API Endpoints
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `GET` | `/` | Existing full-page BLS chat UI |
-| `GET` | `/widget` | Existing floating widget UI |
-| `GET` | `/embed.js` | Existing embeddable widget loader |
+| `GET` | `/` | Full-page BLS chat |
+| `GET` | `/widget` | Floating chat widget |
+| `GET` | `/embed.js` | Script that inserts the widget iframe |
+| `GET` | `/assets/<path:filename>` | Static frontend assets, including the suggested-question bank |
 | `GET` | `/api/config` | Non-secret ATLAS runtime settings |
-| `POST` | `/api/stream` | Existing SSE contract, backed by one ATLAS request |
-| `POST` | `/api/chat` | Existing widget JSON fallback |
-| `POST` | `/api/ask` | Existing full-page JSON fallback |
+| `GET` | `/api/input-config` | Active question and previous-answer length limits and the previous-answer context setting |
+| `POST` | `/api/stream` | SSE progress updates followed by a complete answer or an error |
+| `POST` | `/api/chat` | Widget JSON endpoint that returns `answer` and a `pipeline` value of `atlas_single_completion` |
+| `POST` | `/api/ask` | Full-page compatibility endpoint that returns `answer` as JSON |
 
-Request body:
+All three POST routes accept a JSON object with a nonblank `query` string. Include `last_response` only when `ATLAS_USE_LAST_RESPONSE` is enabled.
 
 ```json
 {
@@ -180,39 +117,88 @@ Request body:
 }
 ```
 
-`last_response` is ignored unless `ATLAS_USE_LAST_RESPONSE=true`.
-
-## Command-line client
-
-The CLI now shares the same client and configuration as Flask:
-
-```bash
-python bls_chat.py
-```
-
-`python scripts/bls_chat.py` remains available as a compatibility entry point.
-
-## Project structure
+## Project Structure
 
 ```text
-bls-chatbot/
-├── app.py                       # Existing Flask routes, now using ATLAS
-├── atlas_chat.py                # Adapted chat_illinois_cli request logic
-├── bls_chat.py                  # Interactive CLI using the shared client
+.
+├── app.py                           # Flask routes and request controls
+├── atlas_chat.py                    # Shared ATLAS completion client
+├── bls_chat.py                      # Interactive CLI
 ├── config/
-│   ├── instructions.txt         # System instructions
-│   └── knowledgebase.md         # BLS Markdown knowledge base
-├── frontend/                    # Existing web UI and widget
-├── scripts/bls_chat.py          # Compatibility CLI entry point
-├── tests/                       # Unit and Flask contract tests
-├── .env.example
-└── requirements.txt
+│   ├── instructions.txt             # System instructions
+│   └── knowledgebase.md             # BLS program knowledge base
+├── frontend/
+│   ├── index.html                   # Full-page chat
+│   ├── widget.html                  # Floating widget
+│   ├── embed.js                     # Widget iframe loader
+│   ├── embed-nextjs/                # Next.js widget
+│   └── vendor/
+│       ├── suggested-questions.json # Shared static question bank
+│       └── suggested-questions.js   # Category-based random selection
+├── scripts/
+│   └── bls_chat.py                  # Compatibility CLI entry point
+├── tests/                           # Python and Node regression suites
+├── .env.example                     # Environment configuration template
+├── Dockerfile                       # Gunicorn container
+└── requirements.txt                 # Python dependencies
 ```
 
-### Input validation tests
+### Updating Content
 
-Run `python -m unittest discover -s tests -v`. For browser-focused checks,
-run `node tests/test_input_frontend.cjs <path-to-jsdom-module>` and
-`node tests/test_safe_markdown.cjs <path-to-jsdom-module>`. These use mock
-responses; no GPU is contacted. See [the input validation report](INPUT_VALIDATION_REPORT.md)
-for results, limitations, and an optional authorized live-evaluation procedure.
+- Edit [`config/instructions.txt`](config/instructions.txt) to change how the advisor responds.
+- Edit [`config/knowledgebase.md`](config/knowledgebase.md) to update program facts and references.
+- Edit [`frontend/vendor/suggested-questions.json`](frontend/vendor/suggested-questions.json) to update the clickable prompts. Each entry has a `question` string and a `category` string. Use distinct questions across at least four categories to keep all four suggestions drawn from different topics.
+
+Flask reads the instructions and knowledge base on every completion request, so edits take effect without a restart. The HTML clients fetch the question bank when the page loads. The Next.js widget bundles the file, so rebuild and redeploy it to publish question-bank changes there.
+
+## Security and Deployment
+
+### Input limits and conversation context
+
+- Chat routes enforce a 1 MiB request-body limit and a default question limit of 16,000 Unicode code points. Set `CHAT_MAX_QUESTION_CHARS` to an integer from 1 to 32,000. Invalid values prevent startup. The body limit accommodates a 32,000-code-point question and a 16,000-code-point previous answer even when supplementary Unicode characters are JSON-escaped, with room for normal request overhead.
+- HTML and Next.js clients read the active limit from `/api/input-config`, count Unicode code points, preserve rejected drafts, and map known HTTP errors to safe messages.
+- Previous-answer context is disabled by default, and the API ignores `last_response` in that mode. When enabled, the HTML clients send at most the latest assistant answer. If it exceeds 16,000 code points, they omit it entirely and notify the user. If a caller supplies an oversized previous answer, the API processes the question unchanged and signals the omission with `X-BLS-Context-Omitted: previous-response-too-long`. The Next.js widget sends only the current question.
+- The model receives the system prompt, current question, and at most one previous assistant answer. For essay and other multi-turn follow-ups, repeat any relevant details from earlier messages.
+
+### Rate limits and browser access
+
+- All three chat routes share a limit of 10 requests per minute per client by default. Set `CHAT_RATE_LIMIT` to adjust it. In production, set `RATELIMIT_STORAGE_URI` to a shared Redis URI such as `redis://your-redis-host:6379/0`. The default `memory://` store is per worker and resets on restart.
+- Flask-Limiter keys requests by the socket client address and ignores forwarded IP headers. Behind a reverse proxy, configure trusted proxy handling at the deployment layer. Otherwise, clients share the proxy's rate limit. Reject arbitrary client-supplied forwarding headers.
+- Verify the scope and deployment configuration of any GPU-side rate limit before changing either layer's protection. Use edge or global limits as needed to protect GPU capacity from distributed traffic.
+- CORS is disabled by default. The Flask-served HTML chat and iframe widget use same-origin API calls. For a separately hosted client, set `CHAT_ALLOWED_ORIGINS` to its exact origin or a comma-separated list of allowed origins. CORS governs browser access only.
+
+### Response handling and hosting
+
+- The HTML clients use locally vendored Marked and DOMPurify with a restricted formatting and link allowlist. Sanitization removes model-supplied images, scripts, styles, and event handlers. If the libraries fail to load, the renderer escapes the output as plain text. Keep the vendored dependencies up to date.
+- The server logs internal service errors and returns generic messages to clients. API responses use `Cache-Control: no-store`.
+- Use Gunicorn and serve the application over HTTPS in production. The supplied Dockerfile runs Gunicorn on port `5000`. The local `python app.py` launcher uses port `5001` with debug mode disabled.
+
+## Testing
+
+Run the tests from the repository root. They use mocked upstream responses and can run offline.
+
+### Python
+
+After installing `requirements.txt`, run the full suite or just the security regressions.
+
+```sh
+python -m unittest discover -s tests -v
+python -m unittest discover -s tests -p "test_security.py" -v
+```
+
+Use the default `CHAT_RATE_LIMIT=10 per minute` and `RATELIMIT_STORAGE_URI=memory://` settings. The Flask test client and upstream mocks let the security suite run without an ATLAS API key, VPN, GPU server, or Redis instance. It covers malformed and oversized requests, input boundaries, provider-setting tampering, rate-limit bypass attempts, private error disclosure, upstream timeouts, file traversal, and SSE event injection.
+
+[GitHub Actions](.github/workflows/python-tests.yml) runs the full Python suite on pushes and pull requests without repository secrets.
+
+### Node.js
+
+Use Node.js with a compatible `jsdom` installation. Replace `<path-to-jsdom-module>` with the module directory, such as `./node_modules/jsdom`.
+
+```sh
+node tests/test_input_frontend.cjs "<path-to-jsdom-module>"
+node tests/test_safe_markdown.cjs "<path-to-jsdom-module>"
+```
+
+The frontend suite checks character counts, suggested questions, optimistic rendering, draft restoration, and retries for both HTML interfaces. The Markdown suite checks sanitization, including partial rendering in the widget.
+
+Results, coverage limits, and an optional authorized live-evaluation procedure are documented in the [input validation report](INPUT_VALIDATION_REPORT.md).

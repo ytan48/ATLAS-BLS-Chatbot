@@ -535,6 +535,7 @@
 <script src="/assets/purify.min.js"></script>
 <script src="/assets/safe-markdown.js"></script>
 <script src="/assets/input-validation.js"></script>
+<script src="/assets/suggested-questions.js"></script>
 <script>
   const panel     = document.getElementById('chat-panel');
   const bubble    = document.getElementById('chat-bubble');
@@ -547,7 +548,7 @@
   const agentAct  = document.getElementById('agent-action');
   const notif     = document.getElementById('notif-badge');
   let isOpen = false;
-  let lastResponse = '';
+  let lastResponse = null;
 
   let inputConfig = null;
   let submitting = false;
@@ -569,8 +570,10 @@
 
 
   // Initial message + quick chips
-  appendBot('Hi! I\'m the **BLS Virtual Advisor**. I can help with admissions, tuition, transfer credits, concentrations, and anything else about the **Bachelor of Liberal Studies** program at the University of Illinois.', true);
-  appendChips(['How much does it cost?', 'What concentrations exist?', 'Can I transfer credits?', 'How do I apply?']);
+  const greeting = appendBot('Hi! I\'m the **BLS Virtual Advisor**. I can help with admissions, tuition, transfer credits, concentrations, and anything else about the **Bachelor of Liberal Studies** program at the University of Illinois.', true);
+  window.BLSSuggestions?.load().then(questions => {
+    if (lastResponse === null) appendChips(questions);
+  }).catch(error => console.warn('Could not load suggested questions.', error));
 
   // ── Panel toggle ───────────────────────────────────────
   function togglePanel() {
@@ -767,7 +770,7 @@
       c.onclick = () => sendMessage(q);
       wrap.appendChild(c);
     });
-    messages.appendChild(wrap);
+    greeting.after(wrap);
     scrollDown();
   }
 

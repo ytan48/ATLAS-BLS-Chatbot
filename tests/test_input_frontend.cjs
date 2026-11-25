@@ -4,6 +4,8 @@ const path = require('node:path');
 const { TextDecoder, TextEncoder } = require('node:util');
 const { JSDOM } = require(path.resolve(process.argv[2]));
 const root = path.resolve(__dirname, '..');
+const questionBank = require('../frontend/vendor/suggested-questions.json');
+const categories = new Map(questionBank.map(({ question, category }) => [question, category]));
 async function run(file) {
   const html = fs.readFileSync(path.join(root, 'frontend', file), 'utf8');
   const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/', pretendToBeVisual: true });
@@ -12,11 +14,13 @@ async function run(file) {
   w.HTMLElement.prototype.scrollTo = () => {};
   w.requestAnimationFrame = cb => { cb(); return 1; };
   w.safeMarkdown = text => text;
+  w.Math.random = () => 0;
   let attempts = 0;
   let submittedQuery;
   let resolveRequest;
   w.fetch = async (url, options) => {
     if (url === '/api/input-config') return {ok:true, json:async()=>({max_question_chars: 40, use_last_response:false, max_previous_response_chars:16000})};
+    if (url === '/assets/suggested-questions.json') return {ok:true, json:async()=>questionBank};
     attempts++;
     submittedQuery = JSON.parse(options.body).query;
     return new Promise(resolve => { resolveRequest = resolve; });
@@ -26,6 +30,7 @@ async function run(file) {
     resolveRequest({ok:true, body:{getReader:()=>({read:async()=> sent ? {done:true} : (sent = true, {done:false, value:new TextEncoder().encode('data: {"type":"answer","content":"OK"}\n\ndata: {"type":"done"}\n\n')})})}});
   }
   w.eval(fs.readFileSync(path.join(root, 'frontend/vendor/input-validation.js'), 'utf8'));
+  w.eval(fs.readFileSync(path.join(root, 'frontend/vendor/suggested-questions.js'), 'utf8'));
   const scripts = [...w.document.querySelectorAll('script:not([src])')];
   scripts.forEach(script => w.eval(script.textContent));
   await new Promise(resolve => setTimeout(resolve, 20));
@@ -33,6 +38,11 @@ async function run(file) {
   const counter = w.document.getElementById('input-counter');
   const error = w.document.getElementById('input-error');
   const send = w.document.getElementById('send-btn');
+  const chipQuestions = () => [...w.document.querySelectorAll('.q-chip')].map(chip => chip.textContent);
+  const suggestions = chipQuestions();
+  assert.equal(suggestions.length, 4);
+  assert.ok(suggestions.every(question => categories.has(question)));
+  assert.equal(new Set(suggestions.map(question => categories.get(question))).size, 4);
   const chip = w.document.querySelector('.q-chip');
   const question = chip.textContent;
   const enter = (options = {}) => input.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', cancelable: true, ...options }));
@@ -60,6 +70,7 @@ async function run(file) {
   assert.equal(enter({ shiftKey: true }), true);
   assert.equal(enter({ isComposing: true }), true);
   assert.equal(attempts, 0);
+  assert.deepEqual(chipQuestions(), suggestions);
 
   chip.click();
   assertPending(question, 1);
@@ -79,6 +90,7 @@ async function run(file) {
   completeReply();
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(userMessages(), [question]);
+  assert.deepEqual(chipQuestions(), []);
   assert.equal(w.document.querySelector('.typing-bubble'), null);
   assert.equal([...w.document.querySelectorAll('.bot-msg')].at(-1).textContent, 'OK');
 

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
+import { selectSuggestedQuestions } from '../../vendor/suggested-questions.js';
+import questionBank from '../../vendor/suggested-questions.json';
 
 declare global {
   interface Window {
@@ -28,9 +30,18 @@ export default function EmbedChatWidget() {
   const [loading, setLoading] = useState(false);
   const [limit, setLimit] = useState<number | null>(null);
   const [error, setError] = useState('');
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const count = Array.from(query).length;
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const selectedSuggestions = useRef(false);
+
+  useEffect(() => {
+    // Pick in the browser so server rendering and hydration start with the same markup.
+    if (selectedSuggestions.current) return;
+    selectedSuggestions.current = true;
+    setSuggestedQuestions(selectSuggestedQuestions(questionBank));
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -45,9 +56,8 @@ export default function EmbedChatWidget() {
       }).catch(() => setError('Could not load the advisor settings. Please reload and try again.'));
   }, [chatApiUrl]);
 
-  const sendMessage = async () => {
-    if (!query.trim() || loading || limit === null || count > limit) return;
-    const text = query;
+  const sendMessage = async (text = query) => {
+    if (!text.trim() || loading || limit === null || Array.from(text).length > limit) return;
     setError('');
     setQuery('');
     setMessages((prev) => [...prev, { role: 'user', content: text }]);
@@ -117,6 +127,21 @@ export default function EmbedChatWidget() {
               )}
             </article>
           ))}
+          {messages.length === 1 && suggestedQuestions.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {suggestedQuestions.map((question) => (
+                <button
+                  key={question}
+                  type="button"
+                  onClick={() => void sendMessage(question)}
+                  disabled={limit === null || Array.from(question).length > limit}
+                  className="rounded-full border border-ilBlue30 bg-white px-3 py-1.5 text-xs text-ilBlue transition hover:bg-ilBlue90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {question}
+                </button>
+              ))}
+            </div>
+          )}
           {loading && (
             <article
               className="flex w-fit items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
@@ -165,7 +190,7 @@ export default function EmbedChatWidget() {
             </a>
             <button
               type="button"
-              onClick={sendMessage}
+              onClick={() => void sendMessage()}
               disabled={loading || !query.trim() || limit === null || count > limit}
               className="rounded-lg bg-ilBlue px-3 py-2 text-xs font-semibold text-white transition hover:bg-ilBlue30 disabled:cursor-not-allowed disabled:opacity-50"
             >

@@ -454,6 +454,7 @@
 <script src="/assets/purify.min.js"></script>
 <script src="/assets/safe-markdown.js"></script>
 <script src="/assets/input-validation.js"></script>
+<script src="/assets/suggested-questions.js"></script>
 <script>
   const msgsEl   = document.getElementById('messages');
   const inputEl  = document.getElementById('user-input');
@@ -463,7 +464,7 @@
   const chipA    = document.getElementById('chip-a');
   const chipB    = document.getElementById('chip-b');
   const agentDesc= document.getElementById('agent-desc');
-  let lastResponse = '';
+  let lastResponse = null;
 
   let inputConfig = null;
   let submitting = false;
@@ -485,8 +486,10 @@
 
 
   // Initial greeting
-  appendBot('Hello! I\'m the **BLS Virtual Advisor** — here to answer your questions about the **Bachelor of Liberal Studies** program at the University of Illinois.\n\nAsk me anything about tuition, transfer credits, concentrations, admissions, or how the program works.');
-  appendChips(['How much does the BLS program cost?', 'What concentrations are available?', 'I work full-time — can I still do this?', 'How do I apply for next semester?']);
+  const greeting = appendBot('Hello! I\'m the **BLS Virtual Advisor** — here to answer your questions about the **Bachelor of Liberal Studies** program at the University of Illinois.\n\nAsk me anything about tuition, transfer credits, concentrations, admissions, or how the program works.');
+  window.BLSSuggestions?.load().then(questions => {
+    if (lastResponse === null) appendChips(questions);
+  }).catch(error => console.warn('Could not load suggested questions.', error));
 
   // Input resize
   inputEl.addEventListener('input', () => {
@@ -675,7 +678,7 @@
       c.onclick = () => sendMessage(q);
       wrap.appendChild(c);
     });
-    msgsEl.appendChild(wrap);
+    greeting.after(wrap);
     scrollDown();
   }
 

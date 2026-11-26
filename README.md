@@ -1,12 +1,13 @@
 # BLS Virtual Advisor
 
-The BLS Virtual Advisor is an AI-powered chatbot for the University of Illinois Bachelor of Liberal Studies (BLS) program. It answers questions about admissions, tuition, transfer credits, concentrations, and academic advising using the program's knowledge base.
+The BLS Virtual Advisor is an AI-powered chatbot that helps prospective and current students find information about the Bachelor of Liberal Studies (BLS) program at the University of Illinois Urbana-Champaign.
 
-- **Full-page chat and embeddable widget.** Open the advisor directly or add the floating widget to another site using the iframe loader. The repository also includes a Next.js widget.
-- **Single-hop ATLAS LLM integration.** Flask makes one OpenAI-compatible ATLAS completion request per accepted question, using the BLS instructions and knowledge base as the system prompt.
-- **Real-time status streaming.** The Flask-served HTML clients receive progress updates via server-sent events (SSE), followed by the complete answer once ATLAS returns it.
-- **Optimistic UI message rendering.** The chat shows the submitted question and a typing indicator immediately. If the request fails, the chat removes the pending entries and restores the question to the input for retry.
-- **Stratified randomized suggested questions.** Each chat loads up to four clickable prompts from a shared question bank. The picker randomly selects one question from each of up to four distinct categories, then fills any remaining slots with unique questions.
+## Key Features
+
+- **Answers to common program questions.** Students can ask about applying, tuition and financial aid, transfer credit, courses and concentrations, and degree progress. The advisor draws on the BLS program knowledge base.
+- **Official resources and advising contacts.** The advisor is designed to point students to university resources for details and to the BLS team for individual advising.
+- **Full-page chat and an embeddable widget.** Students can use a dedicated chat page, and web staff can add the floating widget to program pages.
+- **Editable program content.** Staff can update program information, response guidance, and starter questions by editing the project files.
 
 The Flask service and web interfaces are based on [ATLAS-Illinois/bls-chatbot](https://github.com/ATLAS-Illinois/bls-chatbot). The shared ATLAS client follows the request format from [UIUCATLAS/chat_illinois_cli](https://github.com/UIUCATLAS/chat_illinois_cli).
 
